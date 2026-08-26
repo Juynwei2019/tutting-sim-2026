@@ -1,0 +1,54 @@
+# Prompt：3D Tutting 模擬器（Mixamo 骨架版）
+
+請幫我用**原生 ES Module + Three.js**做一個單一 HTML 檔案的 3D Tutting（機械舞手勢）姿勢模擬器。
+
+## 技術規範
+- 不使用 build 工具，純瀏覽器可直接開啟的單一 `.html` 檔
+- 用 `<script type="importmap">` 設定：
+  - `"three"` → `https://unpkg.com/three@0.160.0/build/three.module.js`
+  - `"three/addons/"` → `https://unpkg.com/three@0.160.0/examples/jsm/`
+- 主邏輯用 `<script type="module">`，以標準 `import` 載入 `GLTFLoader` 與 `OrbitControls`
+- 角色模型固定載入：`https://threejs.org/examples/models/gltf/Xbot.glb`（內建 Mixamo 骨架）
+
+## 模型處理
+- 用 `GLTFLoader` 非同步載入模型，載入完成前顯示 loading 畫面
+- 載入後：
+  - 計算 `Box3` 包圍盒，將模型置中（x/z 置中、y 貼地）
+  - 依模型高度等比縮放到固定身高（例如 1.75 單位）
+  - 加入地板網格（`GridHelper`）
+- 用遍歷 `traverse()` + 名稱比對（`isBone && name.endsWith(...)`）找出以下 Mixamo 骨骼（不需完全符合前綴，只比對後綴即可相容不同命名習慣）：
+  `Hips, Spine, Spine1, Spine2, Neck, Head, RightArm, RightForeArm, RightHand, LeftArm, LeftForeArm, LeftHand`
+
+## 姿勢系統（重點）
+- 載入完成當下，記錄每根用到的骨骼當前 `quaternion` 作為 **rest pose**
+- 之後所有姿勢都是「相對 rest pose 疊加」，公式：
+  `bone.quaternion = restQuat * Quaternion.fromEuler(currentDeltaXYZ)`
+  （不要直接覆寫骨骼旋轉，否則會破壞模型原本的綁定姿勢）
+- 每幀用線性插值（lerp，係數約 0.28）讓目前角度平滑趨近目標角度，做出俐落但不生硬的過渡
+- 內建至少 8 組預設 tutting 姿勢（例如：待機、方框、King Tut、機械人、爆炸、凍結、斜切、十字），每組定義雙手的上臂/前臂/手掌角度、頭部與脊椎角度
+- 提供「隨機姿勢」功能：從一組離散角度候選（如 -180/-135/-90/-45/0/45/90/135/180 的倍數）隨機組合出新姿勢，模擬 tutting 即興感
+- 提供「自動播放」：可調 BPM（60–220），依節奏定時切換姿勢，並有一定機率插入隨機姿勢
+
+## 手動微調面板（因骨架軸向可能與預設角度猜測有落差）
+- 提供可收合的面板，針對每個關鍵骨骼列出 X/Y/Z（依需要的軸）角度滑桿（範圍 -180° ~ 180°）
+- 滑動時即時更新對應骨骼的目標角度，並即時顯示角度數值
+- 切換預設姿勢或按重置時，滑桿數值需同步更新
+
+## 相機與互動
+- 用 `OrbitControls` 讓使用者可拖曳旋轉視角、滾輪縮放（設定 min/max 距離）
+- 相機初始視角要能完整看到角色全身，`target` 對準角色中段
+
+## 視覺風格
+- 深色科技感背景（近黑帶一點藍紫），搭配霧化效果（`Fog`）
+- 環境光 + 主光源（白/藍白）+ 邊緣光（洋紅/粉色），營造舞台聚光的氛圍
+- UI 疊加在畫面下方，半透明漸層黑底，含：
+  - 播放/停止按鈕（播放中變色提示）
+  - BPM 滑桿與數值顯示
+  - 隨機姿勢、重置、微調面板開關按鈕
+  - 一排姿勢預設按鈕，目前選中的姿勢要有高亮樣式
+- 左上角顯示標題文字，右上角顯示簡短操作提示（如「拖曳旋轉視角」）
+- 全部文字使用繁體中文
+
+## 例外處理
+- 模型載入失敗時，loading 文字要改成錯誤提示，並在 console 印出錯誤
+- 找不到對應骨骼時該功能要優雅跳過，不要讓整支程式當掉

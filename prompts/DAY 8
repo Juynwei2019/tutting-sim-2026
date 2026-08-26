@@ -1,0 +1,66 @@
+# Prompt：3D Tutting 模擬器（Mixamo 骨架 + 3D 關節控制環 + 角度貼合）
+
+請幫我用**原生 ES Module + Three.js**做一個單一 HTML 檔案的 3D Tutting（機械舞手勢）姿勢模擬器，關節旋轉不要用 2D 滑桿面板，而是直接把 3D 控制環（rotation gizmo）掛在角色骨骼上操控。
+
+## 技術規範
+- 不使用 build 工具，純瀏覽器可直接開啟的單一 `.html` 檔
+- 用 `<script type="importmap">` 設定：
+  - `"three"` → `https://unpkg.com/three@0.160.0/build/three.module.js`
+  - `"three/addons/"` → `https://unpkg.com/three@0.160.0/examples/jsm/`
+- 主邏輯用 `<script type="module">`，以標準 `import` 載入 `GLTFLoader`、`OrbitControls`、`TransformControls`
+- 角色模型固定載入：`https://threejs.org/examples/models/gltf/Xbot.glb`（內建 Mixamo 骨架）
+
+## 模型處理
+- 用 `GLTFLoader` 非同步載入，載入前顯示 loading 畫面，失敗時顯示錯誤訊息並在 console 印出，不要讓程式當掉
+- 載入後：計算 `Box3` 包圍盒置中並貼地、依身高等比縮放到固定高度（例如 1.75 單位）、加入地板 `GridHelper`
+- 用 `traverse()` + 名稱後綴比對（`isBone && name.endsWith(suffix)`）找出以下 19 根 Mixamo 骨骼，找不到就跳過該骨骼：
+  ```
+  Hips, Spine, Spine1, Spine2, Neck, Head,
+  RightShoulder, RightArm, RightForeArm, RightHand,
+  LeftShoulder, LeftArm, LeftForeArm, LeftHand,
+  RightUpLeg, RightLeg, RightFoot,
+  LeftUpLeg, LeftLeg, LeftFoot
+  ```
+
+## 姿勢疊加機制（重點）
+- 載入完成當下，記錄每根骨骼當前的 `quaternion` 作為 **rest pose**
+- 所有姿勢一律「相對 rest pose 疊加」：`bone.quaternion = restQuat * Quaternion.fromEuler(deltaXYZ, "XYZ")`，絕對不要直接覆寫骨骼旋轉
+- 非拖曳中的關節，每幀用線性插值（lerp，係數約 0.28）讓目前角度平滑趨近目標角度
+
+## 3D 關節控制環（核心需求，取代 2D 滑桿面板）
+- 每根可控骨骼的世界座標位置放一顆小關節球（marker），每幀跟著骨骼移動，用 `MeshBasicMaterial` + `depthTest:false` 確保容易被點到、不被模型擋住
+- 用 `Raycaster` 偵測滑鼠點擊（`pointerdown`→`pointerup`，中間移動距離小於一個閾值才算「點擊」而不是「拖曳視角」），點中關節球就用 `TransformControls`（`setMode("rotate")`）`attach()` 到該骨骼上，關節球要變色/放大表示已選取
+- `TransformControls` 直接掛在被選中的骨骼（`Bone` 本身是 `Object3D`，可以直接 attach），拖曳環即時旋轉該骨骼
+- 拖曳中：
+  - 監聽 `dragging-changed` 事件，拖曳時關閉 `OrbitControls`（避免相機跟著轉），並把該關節從每幀的 lerp 更新中排除，把控制權完全交給 `TransformControls`
+  - 監聽 `objectChange` 事件，即時把骨骼目前的 `quaternion` 反推回「相對 rest pose 的角度」（`deltaQuat = restQuat⁻¹ * bone.quaternion`，再轉成 Euler XYZ 角度），寫回姿勢資料，這樣鬆手後資料與視覺完全同步、不會跳動
+- 提供「座標：本地/世界」按鈕，可切換 `TransformControls.setSpace()` 在 `local` 與 `world` 之間切換
+- 提供選取狀態列：顯示目前選取的關節名稱、目前 X/Y/Z 角度（唯讀數值即時更新）、「取消選取」按鈕（`detach()`）、「此關節歸零」按鈕
+- **不要**額外做 2D 滑桿或關節清單面板來控制角度——關節選取只透過點擊 3D 場景裡的關節球
+
+## 角度貼合（Angle Snapping）
+- 選取狀態列加一個下拉選單：關閉 / 15° / 30° / 45° / 90°
+- 用 `TransformControls.setRotationSnap(THREE.MathUtils.degToRad(角度))` 實作，選「關閉」時傳 `null`
+- 預設開啟 15°，拖曳旋轉環時會自動吸附到選定角度的倍數，符合 tutting 強調直角/幾何角度的視覺特徵
+
+## 預設姿勢
+- 內建至少 8 組預設 tutting 姿勢（待機、方框、King Tut、機械人、爆炸、凍結、斜切、十字），每組只需指定用到的關節（雙手上臂/前臂/手掌、頭、脊椎），沒指定到的關節維持使用者目前手動調整的數值，不要被覆蓋
+- 「隨機姿勢」：從離散角度候選（如 -180/-135/-90/-45/0/45/90/135/180 的倍數）隨機組合手臂姿勢
+- 「自動播放」：可調 BPM（60–220），依節奏定時切換到下一個預設姿勢，並有機率插入隨機姿勢
+
+## 姿勢 JSON 匯出/匯入
+- 提供可切換顯示的面板，內含 `<textarea>`：
+  - 開啟時自動填入目前所有關節角度的 JSON（結構 `{ 關節key: [x,y,z], ... }`，數值四捨五入到小數點下一位）
+  - 「套用 JSON」按鈕：解析並寫回目標姿勢，格式錯誤要跳出提示而不是讓程式壞掉
+  - 「複製」按鈕：選取 textarea 內容並複製到剪貼簿
+
+## 相機與互動
+- 用 `OrbitControls`：拖曳空白處旋轉視角、滾輪縮放（設定 min/max 距離），初始視角要能完整看到角色全身，`target` 對準角色中段
+- 拖曳 3D 控制環時要能正確與 `OrbitControls` 互斥，不會兩邊同時搶輸入
+
+## 視覺風格
+- 深色科技感背景（近黑帶藍紫），搭配 `Fog` 霧化
+- 環境光 + 白色主光源 + 洋紅/粉色邊緣光，營造舞台聚光氛圍
+- 底部 UI 半透明漸層黑底，含播放/停止、BPM 滑桿、隨機姿勢、重置全部、姿勢 JSON 開關、一排姿勢按鈕（選中要高亮），以及關節選取狀態列
+- 左上角標題文字、右上角操作提示（說明拖曳視角 vs 點擊關節球選取）
+- 全部文字使用繁體中文

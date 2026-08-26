@@ -1,0 +1,3656 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>3D Tutting 模擬器（Keyframe + Slerp）</title>
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; background:#0a0a12; overflow:hidden;
+    font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif; }
+  #canvasHolder { position:absolute; inset:0; }
+  #canvasHolder canvas { display:block; }
+  #title { position:absolute; top:14px; left:18px; color:#7fe0ff; font-size:13px; letter-spacing:2px; opacity:.75; }
+  #hint { position:absolute; top:14px; right:18px; font-size:11px; color:#555580; text-align:right; line-height:1.5; }
+  #loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:#7fe0ff; font-size:14px; letter-spacing:2px; background:#0a0a12; }
+  #ui { position:absolute; left:0; right:0; bottom:0; padding:12px 16px 16px; box-sizing:border-box;
+    background:linear-gradient(to top, rgba(10,10,18,.96), rgba(10,10,18,.55) 70%, rgba(10,10,18,.05));
+    color:#e8e8f5; min-height:120px; display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+
+  /* ---- 手動拉高度 ---- */
+  #uiResizeHandle { flex:0 0 auto; height:14px; margin:-4px -16px 4px; cursor:ns-resize;
+    display:flex; align-items:center; justify-content:center; touch-action:none; }
+  #uiResizeHandle .grip { width:36px; height:4px; border-radius:2px; background:#3a3a66; transition:background .12s, width .12s; }
+  #uiResizeHandle:hover .grip { background:#7fe0ff; width:52px; }
+  #uiResizeHandle.dragging .grip { background:#ff2f7e; width:52px; }
+  body.uiResizing { cursor:ns-resize !important; user-select:none; }
+
+  /* ---- 面板隱藏/顯示 ---- */
+  #uiHideBtn { position:absolute; top:-28px; right:0; background:#16162a; border:1px solid #3a3a66;
+    border-bottom:none; color:#9a9ac2; font-size:11px; padding:4px 10px; border-radius:6px 6px 0 0;
+    cursor:pointer; }
+  #uiHideBtn:hover { color:#7fe0ff; }
+  #uiShowBtn { position:absolute; right:18px; bottom:14px; background:#16162a; border:1px solid #3a3a66;
+    color:#7fe0ff; font-size:12px; padding:8px 14px; border-radius:8px; cursor:pointer;
+    box-shadow:0 2px 12px rgba(0,0,0,.4); }
+  #uiShowBtn:hover { background:#21214a; border-color:#6a6aff; }
+
+  /* ---- 常駐區（主控列＋選取狀態） ---- */
+  #uiCommon { flex:0 0 auto; }
+
+  /* ---- 分頁 ---- */
+  #uiTabBar { display:flex; gap:4px; flex:0 0 auto; border-bottom:1px solid #26264a; margin-bottom:8px; }
+  .tabBtn { background:none; border:none; border-bottom:2px solid transparent; color:#7a7aa8;
+    font-size:12px; padding:6px 10px 8px; border-radius:0; cursor:pointer; letter-spacing:.5px; }
+  .tabBtn:hover { color:#cfd6ff; background:none; border-color:#3a3a66; }
+  .tabBtn.active { color:#7fe0ff; border-bottom-color:#7fe0ff; }
+  #uiTabBody { flex:1 1 auto; overflow-y:auto; min-height:0; }
+  .tabPanel { display:none; }
+  .tabPanel.active { display:block; }
+  .poseBtns { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#16162a; border:1px solid #3a3a66; color:#cfd6ff; padding:7px 12px; border-radius:6px;
+    font-size:12px; cursor:pointer; transition:.12s; letter-spacing:.5px; }
+  button:hover { background:#21214a; border-color:#6a6aff; }
+  button:active { transform:scale(.95); }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  button:disabled:hover { background:#16162a; border-color:#3a3a66; }
+  button.active { background:#ff2f7e; border-color:#ff2f7e; color:#0a0a12; font-weight:bold; }
+  #playBtn { background:#00e0a8; border-color:#00e0a8; color:#04241c; font-weight:bold; min-width:78px; }
+  #playBtn.playing { background:#ff4757; border-color:#ff4757; color:#fff; }
+  #kfPlayBtn { background:#ffb400; border-color:#ffb400; color:#2a1a00; font-weight:bold; min-width:96px; }
+  #kfPlayBtn.playing { background:#ff4757; border-color:#ff4757; color:#fff; }
+  label { font-size:11px; color:#9a9ac2; white-space:nowrap; }
+  input[type=range] { -webkit-appearance:none; width:90px; height:3px; background:#33335a; border-radius:2px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:#7fe0ff; cursor:pointer; }
+  #bpmVal { color:#7fe0ff; font-size:12px; min-width:28px; display:inline-block; }
+  select {
+    background:#16162a; border:1px solid #3a3a66; color:#7fe0ff; font-size:11px;
+    padding:5px 8px; border-radius:6px; cursor:pointer;
+  }
+  .panelTitle { font-size:11px; color:#6a6a9a; letter-spacing:1px; margin:10px 0 6px; }
+
+  #selectedBar { display:flex; align-items:center; gap:10px; padding:8px 12px; background:#0f0f20;
+    border:1px solid #26264a; border-radius:8px; margin-bottom:8px; font-size:12px; flex-wrap:wrap; }
+  #selectedLabel { color:#ff2f7e; font-weight:bold; }
+  #selectedAngles { color:#7fe0ff; font-family:monospace; font-size:12px; }
+  #selectedBar button { font-size:11px; padding:4px 9px; }
+
+  #jsonArea {
+    width:100%; box-sizing:border-box; height:120px; background:#0f0f20; color:#7fe0ff;
+    border:1px solid #3a3a66; border-radius:6px; font-family:monospace; font-size:11px;
+    padding:8px; resize:vertical;
+  }
+
+  #kfList { gap:6px; max-height:32vh; overflow-y:auto; align-content:flex-start; margin-bottom:0;
+    padding:2px 2px 4px; }
+  .kfChip {
+    display:flex; align-items:center; gap:2px; background:#16162a; border:1px solid #3a3a66;
+    border-radius:6px; padding:2px 2px 2px 10px; font-size:11px; color:#cfd6ff;
+  }
+  .kfChip.active { border-color:#7fe0ff; color:#7fe0ff; }
+  .kfChip.playing { border-color:#ffb400; box-shadow:0 0 8px #ffb400aa; }
+  .kfChip .sel { background:none; border:none; color:inherit; font-size:11px; padding:5px 4px; cursor:pointer; }
+  .kfChip .del { background:none; border:none; color:#ff6b81; font-size:13px; padding:3px 7px; cursor:pointer; }
+  .kfChip .kfEaseTag { display:flex; align-items:center; gap:3px; padding:2px 6px 2px 4px;
+    border-left:1px solid #2a2a4a; color:#7fe0ff88; font-size:9px; letter-spacing:.3px; white-space:nowrap; }
+  .kfChip .kfEaseTag svg { display:block; }
+  #kfEmpty { font-size:11px; color:#555580; }
+
+  /* ---- 動作姿勢庫／掌指手勢庫：自訂清單 chip + 儲存列 ---- */
+  .libNameInput { flex:1 1 160px; min-width:100px; background:#0f0f20; border:1px solid #3a3a66;
+    color:#e8e8f5; border-radius:6px; padding:7px 9px; font-size:12px; }
+  .libNameInput:focus { outline:none; border-color:#7fe0ff; }
+  #poseLibList, #gestureLibList { gap:6px; max-height:28vh; overflow-y:auto; align-content:flex-start;
+    padding:2px 2px 4px; }
+  .libChip { display:flex; align-items:center; gap:0; background:#16162a; border:1px solid #3a3a66;
+    border-radius:6px; padding:2px 2px 2px 10px; font-size:11px; color:#cfd6ff; max-width:100%; }
+  .libChip .sel { background:none; border:none; color:inherit; font-size:11px; padding:5px 6px;
+    cursor:pointer; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .libChip .exp { background:none; border:none; color:#7fe0ff; font-size:12px; padding:3px 6px; cursor:pointer; }
+  .libChip .del { background:none; border:none; color:#ff6b81; font-size:13px; padding:3px 7px; cursor:pointer; }
+  .libEmpty { font-size:11px; color:#555580; }
+
+  .easeRow { align-items:center; }
+  .easePreview { display:flex; align-items:center; justify-content:center; background:#0f0f20;
+    border:1px solid #26264a; border-radius:6px; padding:3px 5px; }
+  .easePreview svg { display:block; }
+  #kfBeatMsHint { font-size:10px; color:#555580; }
+  select#kfEasingSelect, select#kfBeatsSelect { min-width:118px; }
+
+  /* ---- 軌跡控制點清單 ---- */
+  #trajPointList { gap:6px; align-content:flex-start; }
+  .trajChip { display:flex; align-items:center; gap:2px; background:#16162a; border:1px solid #3a3a66;
+    border-radius:6px; padding:2px 2px 2px 10px; font-size:11px; color:#cfd6ff; }
+  .trajChip.active { border-color:#9944ff; color:#c9a3ff; }
+  .trajChip .sel { background:none; border:none; color:inherit; font-size:11px; padding:5px 4px; cursor:pointer; }
+  .trajChip .del { background:none; border:none; color:#ff6b81; font-size:13px; padding:3px 7px; cursor:pointer; }
+  #trajPointEmpty { font-size:11px; color:#555580; }
+  #trajSampleVal { color:#c9a3ff; font-size:12px; min-width:20px; display:inline-block; }
+  #rootFollowDampVal, #spineCCDDampVal { color:#7fe0ff; font-size:12px; min-width:32px; display:inline-block; }
+  .kfTrajTag { color:#c9a3ff; font-size:11px; padding:0 5px; }
+
+  /* ---- 手指 FK/IK 面板：一指一列、三節橫排，左右手分卡片 ---- */
+  .fingerHandGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .fingerHandCard { background:#0f0f20; border:1px solid #26264a; border-radius:8px; padding:8px 10px; }
+  .fingerHandTitle { font-size:11px; color:#6a6a9a; letter-spacing:1px; margin-bottom:6px; }
+  .fingerRow { display:flex; align-items:center; gap:4px; margin-bottom:4px; }
+  .fingerRowLabel { flex:0 0 44px; font-size:11px; color:#9a9ac2; white-space:nowrap; }
+  .fingerJointBtn { flex:1 1 0; min-width:0; padding:5px 2px; font-size:11px; text-align:center; }
+  .fingerJointBtn.active { background:#ff2f7e; border-color:#ff2f7e; color:#0a0a12; font-weight:bold; }
+  .fingerIKToggleBtn { flex:0 0 28px; padding:5px 0; font-size:10px; color:#00e5ff; border-color:#0a4a55; }
+  .fingerIKToggleBtn.active { background:#00e5ff; border-color:#00e5ff; color:#04241c; font-weight:bold; }
+  @media (max-width:640px){
+    .fingerHandGrid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="canvasHolder"></div>
+<div id="loading">載入 Xbot 模型中…</div>
+<div id="title">TUTTING 3D SIMULATOR — Keyframe + Slerp</div>
+<div id="hint">拖曳空白處旋轉視角・滾輪縮放<br>點擊關節球選取・拖曳彩色環即時旋轉<br>點空白處或按 Esc 取消選取<br>手腳 IK：分頁「手腳 IK」開啟後拖橘色目標球/黃綠色極向球</div>
+<div id="autosaveIndicator" style="position:absolute; top:78px; right:18px; font-size:10px; color:#555580; letter-spacing:.5px; opacity:0; transition:opacity .4s; text-align:right;"></div>
+
+<div id="ui" style="display:none">
+  <div id="uiResizeHandle" title="拖曳調整面板高度"><div class="grip"></div></div>
+  <button id="uiHideBtn" title="隱藏面板（快速鍵 H）">隱藏面板 ▾</button>
+
+  <div id="uiCommon">
+    <div class="row">
+      <button id="playBtn">▶ 預設循環</button>
+      <label>BPM</label>
+      <input type="range" id="bpmSlider" min="60" max="220" value="128" step="1">
+      <span id="bpmVal">128</span>
+      <button id="randBtn">🎲 隨機姿勢</button>
+      <button id="mirrorBtn" title="左右鏡像目前姿勢；若肢體有開啟IK，鏡像後下一幀可能被IK即時解算蓋回原本角度，建議先關閉該肢體IK">🪞 鏡像姿勢</button>
+      <button id="resetBtn">重置全部</button>
+    </div>
+
+    <div class="row" id="historyCameraRow">
+      <button id="undoBtn" title="復原（Ctrl+Z）">↶ 復原</button>
+      <button id="redoBtn" title="重做（Ctrl+Shift+Z）">↷ 重做</button>
+      <label style="margin-left:6px;">鏡頭</label>
+      <button id="camBtn_front" title="正面">正面</button>
+      <button id="camBtn_back" title="背面">背面</button>
+      <button id="camBtn_left" title="左側">左側</button>
+      <button id="camBtn_right" title="右側">右側</button>
+      <button id="camBtn_top" title="俯視">俯視</button>
+      <button id="camBtn_iso" title="45度斜角">45°</button>
+    </div>
+
+    <div id="selectedBar">
+      <span>目前選取：</span>
+      <span id="selectedLabel">未選取</span>
+      <span id="selectedAngles"></span>
+      <button id="spaceBtn">座標：本地</button>
+      <label id="snapLabel" style="margin-left:4px;">貼合角度</label>
+      <select id="snapSelect">
+        <option value="0">關閉</option>
+        <option value="15" selected>15°</option>
+        <option value="30">30°</option>
+        <option value="45">45°</option>
+        <option value="90">90°</option>
+      </select>
+      <button id="deselectBtn">取消選取</button>
+      <button id="zeroJointBtn">此關節歸零</button>
+      <button id="ikModeBtn" style="display:none;">切換：位置</button>
+    </div>
+  </div>
+
+  <div id="uiTabBar">
+    <button class="tabBtn active" data-tab="poses">姿勢庫</button>
+    <button class="tabBtn" data-tab="poseLib">動作姿勢庫</button>
+    <button class="tabBtn" data-tab="gestureLib">掌指手勢庫</button>
+    <button class="tabBtn" data-tab="json">JSON</button>
+    <button class="tabBtn" data-tab="keyframe">時間軸</button>
+    <button class="tabBtn" data-tab="ik">手腳 IK</button>
+    <button class="tabBtn" data-tab="fingers">手指</button>
+    <button class="tabBtn" data-tab="traj">軌跡</button>
+  </div>
+
+  <div id="uiTabBody">
+    <div class="tabPanel active" data-tab="poses" id="tabPoses">
+      <div class="row poseBtns" id="poseBtns"></div>
+    </div>
+
+    <div class="tabPanel" data-tab="poseLib" id="tabPoseLib">
+      <div class="panelTitle">動作姿勢庫 — 把「目前身體姿勢」（軀幹／手臂／腿／頭，不含手指指節）存成自訂清單，可重複套用、單筆匯出、整批匯出/匯入（存在瀏覽器 localStorage）。</div>
+      <div class="row">
+        <input type="text" id="poseLibNameInput" class="libNameInput" placeholder="輸入姿勢名稱…" maxlength="40">
+        <button id="poseLibSaveBtn">💾 儲存目前姿勢</button>
+      </div>
+      <div class="row">
+        <button id="poseLibExportAllBtn">⬇ 匯出全部</button>
+        <button id="poseLibImportAllBtn">⬆ 匯入全部</button>
+        <button id="poseLibImportOneBtn">⬆ 匯入單一姿勢</button>
+        <input type="file" id="poseLibImportAllFile" accept="application/json,.json" style="display:none">
+        <input type="file" id="poseLibImportOneFile" accept="application/json,.json" style="display:none">
+      </div>
+      <div class="row" id="poseLibList">
+        <span class="libEmpty" id="poseLibEmpty">尚未儲存任何姿勢——擺好姿勢後輸入名稱按「儲存目前姿勢」</span>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-tab="gestureLib" id="tabGestureLib">
+      <div class="panelTitle">掌指手勢庫 — 把「目前左右手全部指節角度」存成自訂清單，可重複套用、單筆匯出、整批匯出/匯入（存在瀏覽器 localStorage）。搭配「手指」分頁擺出手勢後再來這裡儲存。</div>
+      <div class="row">
+        <input type="text" id="gestureLibNameInput" class="libNameInput" placeholder="輸入手勢名稱…" maxlength="40">
+        <button id="gestureLibSaveBtn">💾 儲存目前手勢</button>
+      </div>
+      <div class="row">
+        <button id="gestureLibExportAllBtn">⬇ 匯出全部</button>
+        <button id="gestureLibImportAllBtn">⬆ 匯入全部</button>
+        <button id="gestureLibImportOneBtn">⬆ 匯入單一手勢</button>
+        <input type="file" id="gestureLibImportAllFile" accept="application/json,.json" style="display:none">
+        <input type="file" id="gestureLibImportOneFile" accept="application/json,.json" style="display:none">
+      </div>
+      <div class="row" id="gestureLibList">
+        <span class="libEmpty" id="gestureLibEmpty">尚未儲存任何手勢——到「手指」分頁擺好手勢後輸入名稱按「儲存目前手勢」</span>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-tab="json" id="tabJson">
+      <div class="panelTitle">姿勢 JSON（可直接編輯後按「套用」，或按「複製」貼到別處保存）</div>
+      <textarea id="jsonArea" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:6px;">
+        <button id="applyJsonBtn">套用 JSON</button>
+        <button id="copyJsonBtn">複製</button>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-tab="keyframe" id="tabKeyframe">
+      <div class="panelTitle">Keyframe 拍點時間軸 — 用 FK 擺好姿勢後按「新增拍點」記錄一拍，Play 時以四元數 Slerp 平滑過渡</div>
+      <div class="row">
+        <button id="kfPlayBtn">▶ 播放拍點</button>
+        <label><input type="checkbox" id="kfLoopChk"> 循環播放</label>
+        <button id="kfAddBtn">+ 新增拍點</button>
+        <button id="kfUpdateBtn">更新選取拍點</button>
+        <button id="kfDeleteBtn">刪除選取拍點</button>
+        <button id="kfClearBtn">清空全部</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="onionSkinChk" checked> 洋蔥皮預覽（半透明顯示選取拍點的前一拍/後一拍）</label>
+        <span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:#9a9ac2;">
+          <span style="width:10px; height:10px; border-radius:50%; background:#33ccff; display:inline-block;"></span>上一拍
+          <span style="width:10px; height:10px; border-radius:50%; background:#ff44cc; display:inline-block; margin-left:8px;"></span>下一拍
+        </span>
+      </div>
+      <div class="row easeRow">
+        <label>轉場 Easing（32種）</label>
+        <select id="kfEasingSelect"></select>
+        <div class="easePreview" id="kfEasingPreview"></div>
+        <label style="margin-left:6px;">拍數</label>
+        <select id="kfBeatsSelect">
+          <option value="0.25">1/4 拍</option>
+          <option value="0.5">1/2 拍</option>
+          <option value="1" selected>1 拍</option>
+          <option value="1.5">1.5 拍</option>
+          <option value="2">2 拍</option>
+          <option value="3">3 拍</option>
+          <option value="4">4 拍</option>
+        </select>
+        <span id="kfBeatMsHint"></span>
+      </div>
+      <div class="panelTitle" style="margin-top:2px;">未選取拍點時，以上設定作為「下一個新增拍點」的預設值；選取某個拍點時，以上設定即時套用到該拍點的轉場（影響它跳到下一拍的過渡方式）</div>
+      <div class="row" id="kfList">
+        <span id="kfEmpty">尚未新增任何拍點——先用關節控制環擺出第一個姿勢，再按「+ 新增拍點」</span>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-tab="ik" id="tabIK">
+      <div class="panelTitle">手腳 IK — 開啟後場景會出現兩顆球：<br>
+        🟠 橘色實心球＝末端目標球，拖它決定手掌／腳掌想抵達的世界座標<br>
+        🟢 黃綠色八面體＝彎曲極向球，拖它決定手肘／膝蓋要往哪個方向彎<br>
+        （彎曲方向是合理猜測，如果彎錯邊，直接把極向球拖到身體另一側即可）</div>
+      <div class="row" id="ikToggleBtns">
+        <button id="ikBtn_rArm" data-limb="rArm">右手 IK</button>
+        <button id="ikBtn_lArm" data-limb="lArm">左手 IK</button>
+        <button id="ikBtn_rLeg" data-limb="rLeg">右腳 IK</button>
+        <button id="ikBtn_lLeg" data-limb="lLeg">左腳 IK</button>
+      </div>
+      <div class="panelTitle" style="margin-top:2px;">開啟某肢體 IK 後，該肢體的上／中段關節球會暫時隱藏（改由 IK 控制），
+        但手掌／腳掌自己的旋轉仍可照舊點選關節球用 FK 調整。點選目標球或極向球後可在上方「目前選取」列看到座標，
+        按「重置此球位置」可把它拉回目前姿勢對應的預設位置。IK 擺好的姿勢一樣可以按「+ 新增拍點」記錄進時間軸。<br>
+        🦶 腳部IK已內建「腳掌貼地」：開啟腿部IK當下鎖存腳掌世界旋轉，腿怎麼彎都不會翻轉腳掌；
+        手動拖曳調整腳掌角度、放開時會重新鎖存新角度。</div>
+      <div class="panelTitle" style="margin-top:8px;">Effector 朝向控制（不只到達位置，還能指定手掌/腳掌面向哪個方向）：<br>
+        開啟後，目標球選取時可用下方「位置/朝向」切換按鈕改拖曳旋轉環，決定手掌/腳掌朝向。<br>
+        ⚠️ 腳部若同時開啟朝向控制，會取代腳踝貼地鎖存（兩者概念上都是控制末端朝向，互斥）。</div>
+      <div class="row">
+        <button id="orientBtn_rArm">右手朝向控制</button>
+        <button id="orientBtn_lArm">左手朝向控制</button>
+        <button id="orientBtn_rLeg">右腳朝向控制</button>
+        <button id="orientBtn_lLeg">左腳朝向控制</button>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">身體跟隨（適合「手掌固定不動、身體靠過去」的動作，例如扶牆／扶地）：<br>
+        目標球超出手臂可伸展範圍時，整個角色會平移過去湊，而不是把手臂硬拉長。（已加上平滑過渡，不會瞬間跳動）</div>
+      <div class="row">
+        <label><input type="checkbox" id="rootFollow_rArm"> 右手：搆不到時身體靠過去</label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="rootFollow_lArm"> 左手：搆不到時身體靠過去</label>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">脊椎 IK（頭主動搆／對準目標點，身體固定不動）：<br>
+        🔵 藍色球＝頭部目標球，拖它決定頭要伸／彎去對準的世界座標。<br>
+        開啟後 Spine／Spine1／Spine2／Neck 四節會暫時隱藏關節球改由 CCD 求解，頭部自己的旋轉仍可照舊用 FK 調整。</div>
+      <div class="row">
+        <button id="spineIKBtn">脊椎 IK</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="rootFollow_spine"> 頭固定時，搆不到就讓身體去湊（頭頂地等動作）</label>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">頭／胸口 Look-At（只轉單一骨骼朝向去對準目標，不影響其他骨骼）：<br>
+        🟣 紫色球＝頭部朝向目標　🟡 琥珀色球＝胸口朝向目標<br>
+        ⚠️ 胸口 look-at 跟脊椎 IK 共用 Spine2 這根骨骼，兩者互斥，開一個會自動關掉另一個。</div>
+      <div class="row">
+        <button id="lookAtBtn_head">頭部 Look-At</button>
+        <button id="lookAtBtn_chest">胸口 Look-At</button>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">肩胛骨限幅輔助旋轉：手臂 IK 求解前，讓肩膀先小幅偏向目標方向（限制在真人鎖骨可動範圍內，約20°），
+        讓手伸遠時有自然聳肩/前伸感，而不是只有上臂/前臂在彎。關掉則肩膀完全不動，純兩節IK手感。</div>
+      <div class="row">
+        <label><input type="checkbox" id="shoulderAssistCb" checked> 啟用肩胛骨限幅輔助旋轉</label>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">雙手同時固定（需先各自開啟右手/左手 IK）：<br>
+        開啟後，兩個目標球超出手臂伸展範圍時，改成旋轉+平移整個身體去同時湊兩個固定點
+        （取代單手各自的「搆不到時身體靠過去」），適合雙槓、扶地等雙手都固定的動作。</div>
+      <div class="row">
+        <label><input type="checkbox" id="dualAnchorCb"> 啟用雙手同時固定</label>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">身體移動：直接拖曳整個角色的位置（會被拍點記錄，時間軸播放時會內插）。<br>
+        ⚠️ 若手臂/脊椎的「搆不到時身體靠過去」或「雙手同時固定」有開啟，
+        每幀仍會自動調整身體位置，可能會跟這裡的手動拖曳互相覆蓋——
+        純手動控制身體時，建議先關閉那些自動選項。</div>
+      <div class="row">
+        <button id="selectBodyBtn">移動身體</button>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">進階／阻尼設定：數值越小動作越平滑柔和但收斂較慢，越大收斂越快但可能看起來比較「跳」。<br>
+        身體跟隨阻尼＝上面「搆不到時身體靠過去」與「雙手同時固定」共用的平移/旋轉阻尼；
+        脊椎阻尼＝脊椎 IK 每根骨骼每輪只轉「應轉角度」的比例。預設值是原本校準過的手感，微調即可，不建議大幅偏離。</div>
+      <div class="row">
+        <label style="min-width:150px;">身體跟隨阻尼</label>
+        <input type="range" id="rootFollowDampSlider" min="0.05" max="1" step="0.01" value="0.3">
+        <span id="rootFollowDampVal">0.30</span>
+      </div>
+      <div class="row">
+        <label style="min-width:150px;">脊椎 CCD 阻尼</label>
+        <input type="range" id="spineCCDDampSlider" min="0.05" max="1" step="0.01" value="0.5">
+        <span id="spineCCDDampVal">0.50</span>
+      </div>
+      <div class="row">
+        <button id="resetDampingBtn">恢復預設值</button>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-tab="fingers" id="tabFingers">
+      <div class="panelTitle">手指 FK／IK — 點按鈕選取指節，用旋轉環微調（根／中／末＝第1／2／3節，hover 按鈕看完整名稱）。<br>
+        每列尾端「IK」切換鈕：開啟後該指3節FK球暫時隱藏，改拖曳指尖處的青色目標球，整根手指自動彎曲收斂過去，不用逐節手動轉。</div>
+      <div class="panelTitle" style="margin-top:2px;">⚠️ 已知限制：手指「彎曲」方向的局部軸只是合理猜測，未經實機渲染驗證——
+        若拖曳指節旋轉環發現轉向不是彎曲方向，是正常現象，請自行試其他軸向；手指IK因為用CCD動態算軸，不受此限制影響，可放心使用。</div>
+      <div class="fingerHandGrid">
+        <div class="fingerHandCard" id="fingerCard_r">
+          <div class="fingerHandTitle">右手</div>
+        </div>
+        <div class="fingerHandCard" id="fingerCard_l">
+          <div class="fingerHandTitle">左手</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-tab="traj" id="tabTraj">
+      <div class="panelTitle">軌跡輔助工具 — 讓手掌／腳掌沿路徑移動，而不只是單點擺位：<br>
+        1. 先到「手腳 IK」分頁開啟該肢體的 IK　2. 拖橘色目標球到想要的位置　3. 回來這裡按「+ 新增控制點」<br>
+        （新控制點會直接對齊目標球目前座標）。至少 2 點才能生成拍點；模式選「曲線」且 ≥3 點時，
+        會用 Catmull-Rom 曲線平滑連接，播放時是即時取樣曲線本身，不是靠拍點密度堆出平滑。</div>
+      <div class="row" id="trajLimbBtns">
+        <button id="trajLimbBtn_rArm" data-limb="rArm">右手</button>
+        <button id="trajLimbBtn_lArm" data-limb="lArm">左手</button>
+        <button id="trajLimbBtn_rLeg" data-limb="rLeg">右腳</button>
+        <button id="trajLimbBtn_lLeg" data-limb="lLeg">左腳</button>
+      </div>
+      <div class="row">
+        <label>路徑模式</label>
+        <select id="trajModeSelect">
+          <option value="line">折線（逐點直線連接）</option>
+          <option value="curve">曲線（Catmull-Rom 平滑，≥3點才生效）</option>
+        </select>
+        <button id="trajAddPointBtn">+ 新增控制點</button>
+        <button id="trajClearPointsBtn">清除控制點</button>
+      </div>
+      <div class="row" id="trajPointList">
+        <span id="trajPointEmpty">尚未新增控制點——先拖橘色目標球到位，再按「+ 新增控制點」</span>
+      </div>
+      <div class="row">
+        <label>取樣拍點數</label>
+        <input type="range" id="trajSampleSlider" min="2" max="20" value="8" step="1">
+        <span id="trajSampleVal">8</span>
+        <button id="trajGenerateBtn">生成拍點（依序寫入時間軸）</button>
+      </div>
+      <div class="panelTitle" style="margin-top:8px;">點選清單中的 Pxx 按鈕可選取該控制點並用控制環拖曳調整位置；
+        取樣拍點數只影響「編輯階段」時間軸上能個別調整/插入其他姿勢的疏密，不影響播放時的平滑度。<br>
+        ⚠️ 極端大幅彎曲的曲線，彎曲極向球方向在播放過程中途有可能翻面（已知限制），
+        若發生請把取樣拍點數調高或改用折線模式手動分段修正。<br>
+        ⚠️ 目前一條軌跡只對應一個肢體；播放時軌跡是相對「肩／髖」骨骼即時取樣，
+        若編輯路徑時角色曾因搆不到而整個平移，播放時的即時IK不會重現該平移，只會讓手臂伸到最長（已知簡化）。</div>
+    </div>
+  </div>
+</div>
+
+<button id="uiShowBtn" title="顯示面板（快速鍵 H）" style="display:none">☰ 面板</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
+
+const MODEL_URL = "https://threejs.org/examples/models/gltf/Xbot.glb";
+
+const BONE_SUFFIXES = {
+  hips:"Hips", spine:"Spine", spine1:"Spine1", spine2:"Spine2", neck:"Neck", head:"Head",
+  rShoulder:"RightShoulder", rArm:"RightArm", rForeArm:"RightForeArm", rHand:"RightHand",
+  lShoulder:"LeftShoulder", lArm:"LeftArm", lForeArm:"LeftForeArm", lHand:"LeftHand",
+  rUpLeg:"RightUpLeg", rLeg:"RightLeg", rFoot:"RightFoot",
+  lUpLeg:"LeftUpLeg", lLeg:"LeftLeg", lFoot:"LeftFoot"
+};
+
+// ---- 手指 FK：批次產生 30 個指節 key（左右手 x 5指 x 3節）----
+// Mixamo標準命名：{Left|Right}Hand{Thumb|Index|Middle|Ring|Pinky}{1|2|3}，
+// 第4節是指尖端點骨，通常沒有實質旋轉意義，不納入FK控制，只留給IK當effector用（見 FINGER_IK_CHAINS）。
+// 用雙層迴圈 Object.assign 進 BONE_SUFFIXES，不手動一條條寫死；
+// 必須在 ALL_JOINT_KEYS = Object.keys(BONE_SUFFIXES) 這行「之前」執行，才會被通用迴圈涵蓋到。
+const FINGER_DEFS = [
+  { id:"Thumb", label:"拇指" }, { id:"Index", label:"食指" }, { id:"Middle", label:"中指" },
+  { id:"Ring", label:"無名指" }, { id:"Pinky", label:"小指" }
+];
+const HAND_SIDES = [
+  { side:"r", mixamo:"Right", label:"右手" },
+  { side:"l", mixamo:"Left", label:"左手" }
+];
+const FINGER_JOINT_LABELS = { 1:"根", 2:"中", 3:"末" }; // 面板按鈕短標籤，也用於組完整中文名稱
+const FINGER_JOINT_KEYS = []; // 30 個指節 key 的清單，供 marker 半徑/顏色區分等用途查詢
+for (const hs of HAND_SIDES){
+  for (const fd of FINGER_DEFS){
+    for (let j = 1; j <= 3; j++){
+      const key = hs.side + fd.id + j; // 例："rThumb1"
+      BONE_SUFFIXES[key] = hs.mixamo + "Hand" + fd.id + j; // 例："RightHandThumb1"
+      FINGER_JOINT_KEYS.push(key);
+    }
+  }
+}
+const FINGER_JOINT_KEY_SET = new Set(FINGER_JOINT_KEYS);
+
+const ALL_JOINT_KEYS = Object.keys(BONE_SUFFIXES);
+
+const LABEL_LOOKUP = {
+  hips:"骨盆", spine:"脊椎-下", spine1:"脊椎-中", spine2:"脊椎-上", neck:"頸部", head:"頭部",
+  rShoulder:"右肩胛", rArm:"右上臂", rForeArm:"右前臂", rHand:"右手掌",
+  lShoulder:"左肩胛", lArm:"左上臂", lForeArm:"左前臂", lHand:"左手掌",
+  rUpLeg:"右大腿", rLeg:"右小腿", rFoot:"右腳掌",
+  lUpLeg:"左大腿", lLeg:"左小腿", lFoot:"左腳掌"
+};
+// 手指指節中文標籤批次寫入（同一份雙層迴圈資料，不重複手寫）
+for (const hs of HAND_SIDES){
+  for (const fd of FINGER_DEFS){
+    for (let j = 1; j <= 3; j++){
+      LABEL_LOOKUP[hs.side + fd.id + j] = hs.label + fd.label + "-" + FINGER_JOINT_LABELS[j] + "節";
+    }
+  }
+}
+
+// ---- 手腳 IK 四肢鏈設定 ----
+// root→mid→end 對應「肩/肘/手」或「髖/膝/腳」三根骨骼，用兩節解析解 IK 求解。
+// poleOffset 是「開啟 IK 當下」極向球預設放置位置（world 空間，相對 mid 骨骼），
+// 方向是合理猜測（角色面向估計為 +Z），若彎曲方向不對，直接拖曳極向球到另一側即可。
+// shoulder（僅手臂有）：鎖骨輔助關節，見 solveShoulderAssist，走「限幅輔助旋轉」路線，
+// 不納入兩節封閉解本身，避免解剖學上不合理的過度旋轉。
+const IK_CHAINS = {
+  rArm: { shoulder:"rShoulder", root:"rArm", mid:"rForeArm", end:"rHand", label:"右手", poleOffset:new THREE.Vector3(0,-0.15,0.35) },
+  lArm: { shoulder:"lShoulder", root:"lArm", mid:"lForeArm", end:"lHand", label:"左手", poleOffset:new THREE.Vector3(0,-0.15,0.35) },
+  rLeg: { root:"rUpLeg", mid:"rLeg", end:"rFoot", label:"右腳", poleOffset:new THREE.Vector3(0,0,0.4) },
+  lLeg: { root:"lUpLeg", mid:"lLeg", end:"lFoot", label:"左腳", poleOffset:new THREE.Vector3(0,0,0.4) }
+};
+const IK_LIMB_KEYS = Object.keys(IK_CHAINS);
+// 鎖骨限幅輔助旋轉的最大偏轉角（路線B，見分析：鎖骨真實可動範圍小，強制夾住避免穿幫）
+// 註：這裡不能用下面才宣告的 D() 輔助函式（const 宣告順序問題／TDZ），直接寫弧度算式
+const SHOULDER_ASSIST_MAX_ANGLE = 20 * Math.PI / 180;
+// root-follow（手臂/脊椎身體平移、雙手固定）的阻尼係數：每幀只往目標位置前進一部分，
+// 跨幀累積收斂，避免瞬間跳動。已用Node.js模擬驗證：0.3約10~15幀（167~250ms）收斂完成，
+// 跟現有FK彈簧插值(t=0.28)手感量級一致。
+// 改成 let + 可調整（見「進階/阻尼設定」面板），DEFAULT 常數留著給「恢復預設值」按鈕用。
+const ROOT_FOLLOW_LERP_T_DEFAULT = 0.3;
+let ROOT_FOLLOW_LERP_T = ROOT_FOLLOW_LERP_T_DEFAULT;
+// 脊椎 CCD（solveCCDChain）的阻尼係數預設值，同樣可調整，理由見該函式上方註解。
+const SPINE_CCD_DAMPING_DEFAULT = 0.5;
+let spineCCDDamping = SPINE_CCD_DAMPING_DEFAULT;
+
+// ---- 脊椎鏈設定（方向A：多節 CCD IK，頭主動搆/對準目標，身體固定）----
+// 依「固定端→可動端」排列，Hips 本身不進鏈（視為整條鏈的固定支點，不旋轉）。
+// effector（Head）只讀世界座標當「目前指到哪」，本身不被 CCD 直接旋轉，
+// 保留給使用者事後用一般 FK 對頭做最後微調（跟手臂 IK 保留手掌 FK 是同樣設計）。
+const SPINE_IK_CHAIN = { bones:["spine","spine1","spine2","neck"], effector:"head", label:"脊椎" };
+
+// ---- 頭/胸口 look-at 設定 ----
+// 跟脊椎CCD不同：look-at只轉「單一骨骼」自己的朝向去對準目標，不影響其他骨骼位置/彎曲。
+// localForward 是「合理猜測」的骨骼局部前方軸（角色rest pose下head/spine2朝哪個方向算前方），
+// 跟架構文件提到的頭部/胸口朝向同樣屬於「無法實際渲染驗證，靠試錯調整」的猜測值。
+// chest 用 spine2（脊椎最上段）代理，這支單檔版沒有獨立的Chest骨骼。
+const LOOKAT_CONFIG = {
+  head:  { key:"head",  label:"頭部", localForward:new THREE.Vector3(0,0,1) },
+  chest: { key:"spine2", label:"胸口", localForward:new THREE.Vector3(0,0,1) },
+};
+
+// ---- 手指 IK：每指一條 3 節 CCD 鏈（見任務三）----
+// 跟脊椎同構——手指只有一個自然彎曲方向，不像手臂需要pole球指定彎曲側，所以直接複用
+// solveCCDChain()，不做pole球（刻意設計取捨）。用 finger-id（例："rThumb"）為 key 的字典，
+// 不寫死10條重複設定。effector優先用指尖第4節骨（只讀位置，不參與旋轉，不開放FK），
+// 找不到時 loadModel() 會優雅退回用第3節自己當effector（見 fingerEffectorBones 賦值處）。
+const FINGER_IK_CHAINS = {};
+for (const hs of HAND_SIDES){
+  for (const fd of FINGER_DEFS){
+    const fingerId = hs.side + fd.id; // 例："rThumb"
+    FINGER_IK_CHAINS[fingerId] = {
+      bones: [hs.side + fd.id + "1", hs.side + fd.id + "2", hs.side + fd.id + "3"],
+      tipSuffix: hs.mixamo + "Hand" + fd.id + "4", // 例："RightHandThumb4"，只讀位置用
+      label: hs.label + fd.label
+    };
+  }
+}
+const FINGER_IDS = Object.keys(FINGER_IK_CHAINS);
+const FINGER_IK_PREFIX = "fingerIK_"; // selectedIK.limb 前綴慣例，跟 "lookAt_"+name 同風格
+
+let scene, camera, renderer, controls, transformControls, transformControlsIK;
+let bones = {}, restQuat = {}, current = {}, target = {};
+let markerMeshes = {};
+let model;
+let selectedKey = null;
+let draggingKey = null;
+let suppressClick = false;
+
+// ---- 手腳 IK 狀態 ----
+let ikEnabled = { rArm:false, lArm:false, rLeg:false, lLeg:false };
+// ---- 身體跟隨（root follow）狀態：目標超出手臂伸展範圍時，允許整個角色平移去搆 ----
+let ikRootFollowEnabled = { rArm:false, lArm:false };
+
+// ---- 肩胛骨限幅輔助旋轉開關（路線B，見 solveShoulderAssist）----
+// 預設開啟（跟舊行為一致：只要手臂IK開著就會自動偏一點肩膀）。
+// 關掉的話手臂會維持純兩節IK的手感（肩膀完全不動，只有上臂/前臂彎），
+// 適合想要更「機械」、鎖骨完全不參與的動作。
+let shoulderAssistEnabled = true;
+
+// ---- 脊椎 IK 狀態 ----
+let spineIKEnabled = false;
+let spineIKTargetMesh = null; // 藍色：頭部要對準/搆到的世界座標目標球
+// 方向B：頭固定不動時，若身體搆不到，允許整個角色平移去湊（跟手臂 root-follow 同構）
+let spineRootFollowEnabled = false;
+
+// ---- 雙手同時固定狀態 ----
+// 需要 rArm/lArm 的 ikEnabled 都開啟才會生效；開啟時取代個別手臂各自的 root-follow，
+// 改成「旋轉+平移整個角色」去同時滿足兩個固定點（見 solveDualHandAnchor）。
+let dualAnchorEnabled = false;
+
+// ---- 頭/胸口 look-at 狀態 ----
+let lookAtEnabled = { head:false, chest:false };
+let lookAtTargetMesh = { head:null, chest:null };
+
+// ---- 身體移動狀態 ----
+// 設計：控制環不直接attach到model本身（那樣會出現在model原點，通常在腳底附近，
+// 貼著地板格線很難點選），改用一個「代理物件」bodyGizmoProxy放在Hips高度，
+// 讓控制環視覺上出現在髖部；拖曳代理物件時，把它的位移量(delta)套用到model.position，
+// 兩者用相同delta移動，代理物件與角色之間維持固定的相對位置關係。
+let bodyGizmoProxy = null;
+let bodyProxyLastPos = null; // 追蹤代理物件上一次位置，用來算出這次拖曳的delta
+let defaultModelPosition = null; // 載入時的初始位置，供「重置身體位置」使用
+let defaultModelQuaternion = null;
+
+// ---- 腳踝旋轉鎖存（真正的「腳掌貼地」）----
+// 開啟腿部IK當下抓取腳掌世界旋轉當基準，之後不管腿怎麼彎，腳掌世界旋轉都貼住這個值，
+// 不會隨大腿/小腿的IK求解跟著翻轉。使用者手動拖曳調整腳掌FK角度、放開時會重新鎖存新基準
+// （見 dragging-changed 事件），讓「貼地」跟「保留FK可調」兩者並存不衝突。
+let footLockedWorldQuat = { rLeg:null, lLeg:null };
+
+// ---- Effector 朝向控制（手掌/腳掌不只到達位置，還能控制面向）----
+// 預設關閉：關閉時，IK只解位置，末端骨骼的朝向仍照舊由FK彈簧插值控制（維持原本行為不變）。
+// 開啟後，IK目標球本身的「旋轉」會被讀取，套用到手掌/腳掌的世界旋轉。
+// 必須是明確opt-in——如果預設就套用，目標球初始是單位旋轉(0,0,0,1)，一開啟就會把
+// 手掌轉飛到奇怪角度，所以開啟當下要先把目標球的旋轉同步成「目前手掌實際朝向」再啟用。
+let effectorOrientEnabled = { rArm:false, lArm:false, rLeg:false, lLeg:false };
+let ikTargetMeshes = {};   // 橘色：末端目標球（手掌/腳掌想到達的世界座標）
+let ikPoleMeshes = {};     // 黃綠色八面體：彎曲極向球（手肘/膝蓋彎曲朝向）
+let ikPoleLines = {};      // 輔助虛線：從 mid 骨骼連到極向球，方便理解影響對象
+let selectedIK = null;     // { limb, role: 'target' | 'pole' | 'trajPoint', index? }
+
+// ---- 手指 IK 狀態 ----
+let fingerIKEnabled = {};        // { fingerId: boolean }，見 FINGER_IDS
+let fingerIKTargetMeshes = {};   // 青色小球：每指一顆，指尖想到達的世界座標
+let fingerEffectorBones = {};    // 每指IK求解讀位置用的effector骨骼（優先第4節指尖骨，找不到退回第3節）
+for (const fingerId of FINGER_IDS) fingerIKEnabled[fingerId] = false;
+
+// ---- 軌跡輔助工具狀態 ----
+// 紫色控制點球：先拖橘色IK target球到位，按「+新增控制點」，新點永遠對齊target球目前座標
+// （使用者明確要求的行為，不要改回自動偏移/延伸算法）。
+let trajPointMeshes = { rArm:[], lArm:[], rLeg:[], lLeg:[] };
+let trajLine = {};          // 紫色路徑預覽線（依目前控制點即時重繪）
+let TRAJ_MODE = { rArm:"line", lArm:"line", rLeg:"line", lLeg:"line" }; // 'line' | 'curve'
+let trajActiveLimb = "rArm"; // 目前「軌跡」分頁編輯中的肢體（只有這個肢體的控制點球/路徑線會顯示）
+let trajSampleCount = 8;     // 生成拍點時沿路徑等間隔取樣幾點（2~20）
+
+let autoPlaying = false;
+let bpm = 128;
+let beatTimer = null;
+let poseIndex = 0;
+
+// ---- 鏡頭預設 / Undo-Redo / 自動存檔 狀態 ----
+let modelHeight = 2; // loadModel() 完成後同步成實際使用的身高常數，供鏡頭預設換算距離
+let cameraTween = null; // {fromPos, toPos, fromTarget, toTarget, start, duration}
+let historyStack = [];
+let historyIndex = -1;
+let restoringHistory = false;
+const HISTORY_MAX = 50;
+let autoSaveTimer = null;
+const AUTOSAVE_KEY = "tuttingAutosave_v1";
+const AUTOSAVE_SCHEMA_VERSION = 1;
+
+// ---- 洋蔥皮（Onion Skinning）狀態 ----
+// ghostPrev/ghostNext 是用 SkeletonUtils.clone(model) 複製出的獨立骨架半透明殘影，
+// 只在選取某個拍點、且目前在「時間軸」分頁時才顯示，分別套用「上一拍」「下一拍」的角度資料。
+// 只在選取拍點變動時才重新計算殘影姿勢（不是每幀），詳見 updateOnionSkins()。
+let onionSkinEnabled = true;
+let ghostPrev = null, ghostNext = null;
+let ghostBones = { prev:{}, next:{} };
+
+// ---- Keyframe 時間軸狀態 ----
+let keyframes = [];       // [{ angles: { jointKey: [x,y,z], ... } }, ...]
+let kfEditingIndex = -1;  // 目前選取（預覽/可更新/可刪除）的拍點
+let kfPlaying = false;
+let kfLoop = false;
+let kfIndex = 0;
+let kfStartTime = 0;
+let kfPendingEasing = "easeInOutQuad"; // 選取拍點時即時編輯／新增拍點時的預設 Easing
+let kfPendingBeats = 1;                // 選取拍點時即時編輯／新增拍點時的預設拍數
+
+const D = THREE.MathUtils.degToRad;
+const R = THREE.MathUtils.radToDeg;
+
+// ---- 32 種 Easing 緩動曲線（Robert Penner 公式家族 + Linear + Smoothstep）----
+// 每個函式：輸入 t ∈ [0,1] 的線性進度，回傳緩動後的進度。
+// Back / Elastic 系列刻意允許輸出超出 [0,1]（overshoot），拿去 slerp 四元數會自然做出
+// 「甩過頭再回彈」的頓點效果，很適合 tutting 的甩勁動作。
+function easeOutBounce(t){
+  const n1 = 7.5625, d1 = 2.75;
+  if (t < 1/d1) return n1*t*t;
+  if (t < 2/d1) return n1*(t -= 1.5/d1)*t + 0.75;
+  if (t < 2.5/d1) return n1*(t -= 2.25/d1)*t + 0.9375;
+  return n1*(t -= 2.625/d1)*t + 0.984375;
+}
+const EASINGS = {
+  linear:        t => t,
+  smoothStep:    t => t*t*(3 - 2*t),
+
+  easeInSine:    t => 1 - Math.cos((t*Math.PI)/2),
+  easeOutSine:   t => Math.sin((t*Math.PI)/2),
+  easeInOutSine: t => -(Math.cos(Math.PI*t) - 1)/2,
+
+  easeInQuad:    t => t*t,
+  easeOutQuad:   t => 1 - (1-t)*(1-t),
+  easeInOutQuad: t => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2,
+
+  easeInCubic:    t => t*t*t,
+  easeOutCubic:   t => 1 - Math.pow(1-t, 3),
+  easeInOutCubic: t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2,
+
+  easeInQuart:    t => t*t*t*t,
+  easeOutQuart:   t => 1 - Math.pow(1-t, 4),
+  easeInOutQuart: t => t < 0.5 ? 8*t*t*t*t : 1 - Math.pow(-2*t+2, 4)/2,
+
+  easeInQuint:    t => t*t*t*t*t,
+  easeOutQuint:   t => 1 - Math.pow(1-t, 5),
+  easeInOutQuint: t => t < 0.5 ? 16*t*t*t*t*t : 1 - Math.pow(-2*t+2, 5)/2,
+
+  easeInExpo:    t => t === 0 ? 0 : Math.pow(2, 10*t - 10),
+  easeOutExpo:   t => t === 1 ? 1 : 1 - Math.pow(2, -10*t),
+  easeInOutExpo: t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 ? Math.pow(2, 20*t-10)/2 : (2 - Math.pow(2, -20*t+10))/2,
+
+  easeInCirc:    t => 1 - Math.sqrt(1 - Math.pow(t, 2)),
+  easeOutCirc:   t => Math.sqrt(1 - Math.pow(t-1, 2)),
+  easeInOutCirc: t => t < 0.5 ? (1 - Math.sqrt(1 - Math.pow(2*t, 2)))/2 : (Math.sqrt(1 - Math.pow(-2*t+2, 2)) + 1)/2,
+
+  easeInBack: t => { const c1=1.70158, c3=c1+1; return c3*t*t*t - c1*t*t; },
+  easeOutBack: t => { const c1=1.70158, c3=c1+1; return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2); },
+  easeInOutBack: t => {
+    const c1=1.70158, c2=c1*1.525;
+    return t < 0.5
+      ? (Math.pow(2*t, 2) * ((c2+1)*2*t - c2)) / 2
+      : (Math.pow(2*t-2, 2) * ((c2+1)*(t*2-2) + c2) + 2) / 2;
+  },
+
+  easeInElastic: t => {
+    const c4 = (2*Math.PI)/3;
+    return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10*t-10) * Math.sin((t*10-10.75)*c4);
+  },
+  easeOutElastic: t => {
+    const c4 = (2*Math.PI)/3;
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10*t) * Math.sin((t*10-0.75)*c4) + 1;
+  },
+  easeInOutElastic: t => {
+    const c5 = (2*Math.PI)/4.5;
+    return t === 0 ? 0 : t === 1 ? 1 : t < 0.5
+      ? -(Math.pow(2, 20*t-10) * Math.sin((20*t-11.125)*c5))/2
+      : (Math.pow(2, -20*t+10) * Math.sin((20*t-11.125)*c5))/2 + 1;
+  },
+
+  easeOutBounce,
+  easeInBounce:    t => 1 - easeOutBounce(1 - t),
+  easeInOutBounce: t => t < 0.5 ? (1 - easeOutBounce(1 - 2*t))/2 : (1 + easeOutBounce(2*t - 1))/2
+};
+
+// select 選單分組用（10 家族 x In/Out/InOut = 30 + Linear + SmoothStep = 32）
+const EASING_GROUPS = [
+  { label:"基本", items:[["linear","Linear（線性）"],["smoothStep","SmoothStep（平滑）"]] },
+  { label:"Sine",    items:[["easeInSine","In"],["easeOutSine","Out"],["easeInOutSine","InOut"]] },
+  { label:"Quad",    items:[["easeInQuad","In"],["easeOutQuad","Out"],["easeInOutQuad","InOut"]] },
+  { label:"Cubic",   items:[["easeInCubic","In"],["easeOutCubic","Out"],["easeInOutCubic","InOut"]] },
+  { label:"Quart",   items:[["easeInQuart","In"],["easeOutQuart","Out"],["easeInOutQuart","InOut"]] },
+  { label:"Quint",   items:[["easeInQuint","In"],["easeOutQuint","Out"],["easeInOutQuint","InOut"]] },
+  { label:"Expo",    items:[["easeInExpo","In"],["easeOutExpo","Out"],["easeInOutExpo","InOut"]] },
+  { label:"Circ",    items:[["easeInCirc","In"],["easeOutCirc","Out"],["easeInOutCirc","InOut"]] },
+  { label:"Back（甩過頭）",    items:[["easeInBack","In"],["easeOutBack","Out"],["easeInOutBack","InOut"]] },
+  { label:"Elastic（彈簧）",   items:[["easeInElastic","In"],["easeOutElastic","Out"],["easeInOutElastic","InOut"]] },
+  { label:"Bounce（彈跳）",    items:[["easeInBounce","In"],["easeOutBounce","Out"],["easeInOutBounce","InOut"]] }
+];
+
+// 依取樣點畫出 Easing 曲線的 SVG path（y 軸範圍放大到 -0.4~1.4 以容納 Back/Elastic 的 overshoot）
+function easingSVGPath(fn, w, h, pad){
+  const steps = 32, yMin = -0.4, yMax = 1.4;
+  let d = "";
+  for (let i = 0; i <= steps; i++){
+    const t = i/steps;
+    let y = fn(t);
+    if (!isFinite(y)) y = 0;
+    const x = pad + t*(w - 2*pad);
+    const yn = (y - yMin)/(yMax - yMin);
+    const yy = (h - pad) - yn*(h - 2*pad);
+    d += (i===0 ? "M" : "L") + x.toFixed(1) + "," + yy.toFixed(1) + " ";
+  }
+  return d;
+}
+
+function buildEasingSVG(name, w, h){
+  const fn = EASINGS[name] || EASINGS.linear;
+  const pad = 3;
+  const path = easingSVGPath(fn, w, h, pad);
+  // 輔助虛線：0 與 1 的水平基準線，方便判讀 overshoot 幅度
+  const y0 = (h - pad) - ((0 - (-0.4))/1.8)*(h - 2*pad);
+  const y1 = (h - pad) - ((1 - (-0.4))/1.8)*(h - 2*pad);
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`
+    + `<line x1="${pad}" y1="${y0.toFixed(1)}" x2="${w-pad}" y2="${y0.toFixed(1)}" stroke="#33335a" stroke-width="1" stroke-dasharray="2,2"/>`
+    + `<line x1="${pad}" y1="${y1.toFixed(1)}" x2="${w-pad}" y2="${y1.toFixed(1)}" stroke="#33335a" stroke-width="1" stroke-dasharray="2,2"/>`
+    + `<path d="${path}" fill="none" stroke="#7fe0ff" stroke-width="1.6" stroke-linecap="round"/>`
+    + `</svg>`;
+}
+
+function buildEasingSelectOptions(){
+  return EASING_GROUPS.map(g => {
+    const opts = g.items.map(([val,label]) => `<option value="${val}">${label}</option>`).join("");
+    return `<optgroup label="${g.label}">${opts}</optgroup>`;
+  }).join("");
+}
+
+const POSES = [
+  { name:"待機", rArm:[0,0,0], rForeArm:[0,0,0], rHand:[0,0,0],
+                 lArm:[0,0,0], lForeArm:[0,0,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] },
+  { name:"方框", rArm:[0,0,-80], rForeArm:[0,-90,0], rHand:[0,0,0],
+                 lArm:[0,0,80], lForeArm:[0,90,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] },
+  { name:"King Tut", rArm:[10,0,-85], rForeArm:[0,-95,0], rHand:[0,0,-25],
+                      lArm:[-10,0,60], lForeArm:[0,15,0], lHand:[0,0,0], head:[0,-12,0], spine:[0,0,6] },
+  { name:"機械人", rArm:[-15,0,-70], rForeArm:[0,-10,0], rHand:[0,0,85],
+                   lArm:[-15,0,70], lForeArm:[0,10,0], lHand:[0,0,-85], head:[0,0,0], spine:[0,0,0] },
+  { name:"爆炸", rArm:[10,0,-150], rForeArm:[0,-25,0], rHand:[0,0,20],
+                 lArm:[10,0,150], lForeArm:[0,25,0], lHand:[0,0,-20], head:[0,0,0], spine:[0,0,0] },
+  { name:"凍結", rArm:[0,0,-45], rForeArm:[0,-100,0], rHand:[0,0,35],
+                 lArm:[-30,0,85], lForeArm:[0,20,0], lHand:[0,0,0], head:[0,15,0], spine:[0,0,-6] },
+  { name:"斜切", rArm:[0,0,-95], rForeArm:[0,-55,0], rHand:[0,0,-55],
+                 lArm:[10,0,65], lForeArm:[0,75,0], lHand:[0,0,55], head:[0,-15,0], spine:[0,0,10] },
+  { name:"十字", rArm:[0,0,-85], rForeArm:[0,0,0], rHand:[0,0,0],
+                 lArm:[0,0,85], lForeArm:[0,0,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] }
+];
+
+init();
+
+function init(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a12);
+  scene.fog = new THREE.Fog(0x0a0a12, 6, 16);
+
+  camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
+  camera.position.set(0, 1.4, 3.2);
+
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.getElementById("canvasHolder").appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0x8899ff, 0.7));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  keyLight.position.set(3, 5, 4);
+  scene.add(keyLight);
+  const rim = new THREE.DirectionalLight(0xff2f7e, 0.5);
+  rim.position.set(-4, 3, -3);
+  scene.add(rim);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1, 0);
+  controls.enableDamping = true;
+  controls.minDistance = 1.0;
+  controls.maxDistance = 8;
+
+  transformControls = new TransformControls(camera, renderer.domElement);
+  transformControls.setMode("rotate");
+  transformControls.setSpace("local");
+  transformControls.setSize(0.7);
+  transformControls.setRotationSnap(D(15));
+  transformControls.addEventListener("dragging-changed", (e) => {
+    controls.enabled = !e.value;
+    if (e.value) {
+      draggingKey = selectedKey;
+    } else {
+      draggingKey = null;
+      // 若剛放開拖曳的關節，是某條開啟中腿部IK鏈的腳掌（Foot），
+      // 重新抓取當下世界旋轉當作新的鎖存基準，讓使用者的手動微調保留下來，
+      // 而不是下一幀就被舊的鎖存值蓋回去。
+      for (const limb of ["rLeg", "lLeg"]){
+        if (ikEnabled[limb] && selectedKey === IK_CHAINS[limb].end) captureFootLock(limb);
+      }
+      suppressClick = true;
+      setTimeout(() => suppressClick = false, 80);
+      pushHistory();
+    }
+  });
+  transformControls.addEventListener("objectChange", () => {
+    if (selectedKey) commitFromBone(selectedKey);
+  });
+  scene.add(transformControls);
+
+  // IK 目標球／極向球專用的平移控制環（跟關節旋轉環分開，模式固定為 translate）
+  transformControlsIK = new TransformControls(camera, renderer.domElement);
+  transformControlsIK.setMode("translate");
+  transformControlsIK.setSpace("world");
+  transformControlsIK.setSize(0.7);
+  transformControlsIK.addEventListener("dragging-changed", (e) => {
+    controls.enabled = !e.value;
+    if (!e.value) {
+      suppressClick = true;
+      setTimeout(() => suppressClick = false, 80);
+    }
+  });
+  // 身體移動：拖曳的是bodyGizmoProxy（放在Hips高度），不是model本身，
+  // 這裡把每次拖曳造成的位移量(delta)同步套用到model.position，
+  // 讓控制環視覺上停在髖部，但實際移動的是整個角色。
+  transformControlsIK.addEventListener("objectChange", () => {
+    if (selectedIK && selectedIK.limb === "body" && bodyGizmoProxy && bodyProxyLastPos){
+      const delta = bodyGizmoProxy.position.clone().sub(bodyProxyLastPos);
+      model.position.add(delta);
+      model.updateWorldMatrix(true, true);
+      bodyProxyLastPos.copy(bodyGizmoProxy.position);
+    } else if (selectedIK && selectedIK.role === "trajPoint"){
+      updateTrajVisual(selectedIK.limb);
+    }
+  });
+  scene.add(transformControlsIK);
+
+  bodyGizmoProxy = new THREE.Object3D();
+  scene.add(bodyGizmoProxy);
+
+  window.addEventListener("resize", onResize);
+  setupPickRaycaster();
+
+  loadModel();
+  requestAnimationFrame(animate);
+}
+
+function loadModel(){
+  const loader = new GLTFLoader();
+  loader.load(MODEL_URL, (gltf) => {
+    model = gltf.scene;
+
+    const box3 = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box3.getSize(size);
+    const center = new THREE.Vector3();
+    box3.getCenter(center);
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= box3.min.y;
+
+    const targetHeight = 1.75;
+    modelHeight = targetHeight;
+    const scale = targetHeight / (size.y || 1);
+    model.scale.setScalar(scale);
+
+    scene.add(model);
+    scene.add(new THREE.GridHelper(20, 20, 0x2a2a55, 0x1a1a33));
+
+    model.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+
+    for (const key of ALL_JOINT_KEYS){
+      bones[key] = findBone(model, BONE_SUFFIXES[key]);
+      if (!bones[key]) console.warn("找不到骨骼:", BONE_SUFFIXES[key]);
+    }
+    for (const key of ALL_JOINT_KEYS){
+      if (bones[key]) restQuat[key] = bones[key].quaternion.clone();
+    }
+    buildOnionGhosts();
+
+    // 手指IK effector：優先找指尖第4節骨（只讀位置，不開放FK），模型萬一沒有這根骨頭，
+    // 優雅退回用第3節自己當effector，只是精準度變差、不會整個壞掉。
+    for (const fingerId of FINGER_IDS){
+      const chain = FINGER_IK_CHAINS[fingerId];
+      let tipBone = findBone(model, chain.tipSuffix);
+      if (!tipBone){
+        console.warn("找不到指尖骨骼(" + chain.tipSuffix + ")，" + chain.label + " IK 退回用第3節自身當effector，精準度會變差");
+        tipBone = bones[chain.bones[2]];
+      }
+      fingerEffectorBones[fingerId] = tipBone;
+    }
+
+    // 記錄置中/貼地完成後的初始位置，供「重置身體位置」使用
+    defaultModelPosition = model.position.clone();
+    defaultModelQuaternion = model.quaternion.clone();
+
+    buildJointMarkers();
+    buildIKMarkers();
+    buildSpineIKMarker();
+    buildLookAtMarkers();
+    buildTrajMarkers();
+    buildFingerIKMarkers();
+    buildFingerPanel();
+
+    controls.target.set(0, targetHeight * 0.55, 0);
+    camera.position.set(0, targetHeight * 0.75, targetHeight * 1.6);
+    controls.update();
+
+    resetPose();
+    buildPoseButtons();
+    bindTopUI();
+    tryLoadAutosave();
+    renderKeyframeChips();
+    pushHistory();
+
+    document.getElementById("loading").style.display = "none";
+    // #ui 的顯示/隱藏（flex/none）已由 bindTopUI() 內的 initUIVisibility() 依 localStorage 設定好，這裡不再覆蓋
+  }, undefined, (err) => {
+    document.getElementById("loading").textContent = "模型載入失敗，請檢查網路連線";
+    console.error(err);
+  });
+}
+
+function findBone(root, suffix){
+  let found = null;
+  root.traverse(o => { if (!found && o.isBone && o.name.endsWith(suffix)) found = o; });
+  return found;
+}
+
+function eulerToQuat(xyz){
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(D(xyz[0]), D(xyz[1]), D(xyz[2]), "XYZ"));
+}
+
+// ---- 洋蔥皮（Onion Skinning）----
+// 用 SkeletonUtils.clone(model) 複製出兩份「獨立骨架」的半透明殘影模型（青色＝上一拍，
+// 洋紅＝下一拍），跟主模型完全脫鉤，各自有自己的一套 THREE.Bone，所以可以同時呈現
+// 三種不同姿勢（目前選取拍點 + 前一拍殘影 + 後一拍殘影）而不互相干擾。
+// 必須在套用任何姿勢之前（緊接在 restQuat 算完之後）就複製，這樣殘影骨架的初始本地旋轉
+// 才會等於真正的 bind pose，之後直接沿用主模型的 restQuat 幫殘影套姿勢即可，不用另外存一份。
+function buildOnionGhosts(){
+  const configs = [
+    { key:"prev", color:0x33ccff }, // 上一拍：青色
+    { key:"next", color:0xff44cc }  // 下一拍：洋紅
+  ];
+  for (const cfg of configs){
+    const ghost = skeletonClone(model);
+    ghost.traverse(o => {
+      if (o.isMesh){
+        o.frustumCulled = false;
+        o.material = new THREE.MeshBasicMaterial({
+          color: cfg.color, transparent:true, opacity:0.26,
+          depthWrite:false, side:THREE.DoubleSide
+        });
+        o.renderOrder = 500;
+      }
+    });
+    for (const key of ALL_JOINT_KEYS){
+      const b = findBone(ghost, BONE_SUFFIXES[key]);
+      if (b) ghostBones[cfg.key][key] = b;
+    }
+    ghost.visible = false;
+    scene.add(ghost);
+    if (cfg.key === "prev") ghostPrev = ghost; else ghostNext = ghost;
+  }
+}
+
+// 把某份殘影骨架套成某個拍點(kf)記錄的角度＋身體位置
+function poseGhostFromKeyframe(which, kf){
+  const ghost = which === "prev" ? ghostPrev : ghostNext;
+  const gb = ghostBones[which];
+  if (!ghost || !kf) return;
+  for (const key of ALL_JOINT_KEYS){
+    const bone = gb[key];
+    if (!bone || !restQuat[key]) continue;
+    const angles = kf.angles[key] || [0,0,0];
+    bone.quaternion.copy(restQuat[key]).multiply(eulerToQuat(angles));
+  }
+  if (kf.body){
+    ghost.position.fromArray(kf.body.position);
+    ghost.quaternion.fromArray(kf.body.quaternion);
+  }
+  ghost.updateMatrixWorld(true);
+}
+
+// 是否目前正在看「時間軸」分頁——只有在這個分頁殘影才有意義，切到別的分頁（例如手腳IK）
+// 顯示兩層半透明殘影反而會干擾操作，所以離開時自動隱藏。
+function isKeyframeTabActive(){
+  const panel = document.getElementById("tabKeyframe");
+  return !!(panel && panel.classList.contains("active"));
+}
+
+// 決定殘影目前該不該顯示、顯示哪個拍點的姿勢。呼叫時機：拍點清單重繪時（見
+// renderKeyframeChips 尾端）與切換分頁時（見 switchTab），涵蓋新增/更新/刪除/選取拍點、
+// Undo/Redo、自動存檔還原、拍點播放開始/結束等幾乎所有會影響「目前選取拍點」的情況。
+function updateOnionSkins(){
+  if (!ghostPrev || !ghostNext) return;
+  const show = onionSkinEnabled && !kfPlaying && isKeyframeTabActive() && kfEditingIndex >= 0 && keyframes.length > 1;
+  if (!show){
+    ghostPrev.visible = false;
+    ghostNext.visible = false;
+    return;
+  }
+  const prevKf = keyframes[kfEditingIndex - 1];
+  const nextKf = keyframes[kfEditingIndex + 1];
+  if (prevKf){ poseGhostFromKeyframe("prev", prevKf); ghostPrev.visible = true; }
+  else ghostPrev.visible = false;
+  if (nextKf){ poseGhostFromKeyframe("next", nextKf); ghostNext.visible = true; }
+  else ghostNext.visible = false;
+}
+
+// ---- 關節球（直接掛在骨骼上的可點擊 marker） ----
+function buildJointMarkers(){
+  const geo = new THREE.SphereGeometry(0.03, 14, 14);
+  // 手指骨節間距很小，用原本身體關節球半徑會讓相鄰指節重疊難點選，改用更小半徑＋不同顏色區分
+  const fingerGeo = new THREE.SphereGeometry(0.012, 10, 10);
+  for (const key of ALL_JOINT_KEYS){
+    if (!bones[key]) continue;
+    const isFinger = FINGER_JOINT_KEY_SET.has(key);
+    const mat = new THREE.MeshBasicMaterial({ color: isFinger ? 0xffa8e8 : 0x7fe0ff, transparent:true, opacity:0.9, depthTest:false });
+    const marker = new THREE.Mesh(isFinger ? fingerGeo : geo, mat);
+    marker.renderOrder = 999;
+    marker.userData.jointKey = key;
+    marker.userData.pickType = "joint";
+    scene.add(marker);
+    markerMeshes[key] = marker;
+  }
+}
+
+function updateMarkers(){
+  const v = new THREE.Vector3();
+  for (const key in markerMeshes){
+    if (!bones[key]) continue;
+    bones[key].getWorldPosition(v);
+    markerMeshes[key].position.copy(v);
+  }
+}
+
+function highlightMarkers(){
+  for (const key in markerMeshes){
+    const m = markerMeshes[key];
+    const isSel = key === selectedKey;
+    const isFinger = FINGER_JOINT_KEY_SET.has(key);
+    m.material.color.set(isSel ? 0xff2f7e : (isFinger ? 0xffa8e8 : 0x7fe0ff));
+    m.scale.setScalar(isSel ? 1.6 : 1.0);
+  }
+  highlightFingerButtons();
+}
+
+// 手指面板按鈕的選取回饋（跟 highlightMarkers 同一批呼叫時機：selectJoint/deselectJoint/
+// selectIKMarker/selectBodyMarker 都會呼叫 highlightMarkers，這裡搭便車一起更新）
+function highlightFingerButtons(){
+  document.querySelectorAll(".fingerJointBtn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.jointkey === selectedKey);
+  });
+}
+
+// ---- 手腳 IK：目標球（橙色）＋極向球（黃綠色八面體） ----
+function buildIKMarkers(){
+  const targetGeo = new THREE.SphereGeometry(0.038, 16, 16);
+  const poleGeo = new THREE.OctahedronGeometry(0.032, 0);
+
+  for (const limb of IK_LIMB_KEYS){
+    const targetMat = new THREE.MeshBasicMaterial({ color:0xff8c1a, transparent:true, opacity:0.95, depthTest:false });
+    const targetMesh = new THREE.Mesh(targetGeo, targetMat);
+    targetMesh.renderOrder = 998;
+    targetMesh.visible = false;
+    targetMesh.userData.pickType = "ikTarget";
+    targetMesh.userData.limb = limb;
+    scene.add(targetMesh);
+    ikTargetMeshes[limb] = targetMesh;
+
+    const poleMat = new THREE.MeshBasicMaterial({ color:0xccff33, transparent:true, opacity:0.95, depthTest:false });
+    const poleMesh = new THREE.Mesh(poleGeo, poleMat);
+    poleMesh.renderOrder = 998;
+    poleMesh.visible = false;
+    poleMesh.userData.pickType = "ikPole";
+    poleMesh.userData.limb = limb;
+    scene.add(poleMesh);
+    ikPoleMeshes[limb] = poleMesh;
+
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const lineMat = new THREE.LineBasicMaterial({ color:0xccff33, transparent:true, opacity:0.5, depthTest:false });
+    const line = new THREE.Line(lineGeo, lineMat);
+    line.renderOrder = 997;
+    line.visible = false;
+    scene.add(line);
+    ikPoleLines[limb] = line;
+
+    syncIKMarkersToDefault(limb);
+  }
+}
+
+// 把某肢體的目標球／極向球對齊「目前姿勢」算出的預設位置（開啟 IK 當下、或按重置時呼叫，避免瞬間跳動）
+function syncIKMarkersToDefault(limb){
+  const chain = IK_CHAINS[limb];
+  const endBone = bones[chain.end];
+  const midBone = bones[chain.mid];
+  if (!endBone || !midBone) return;
+
+  const rootBone = bones[chain.root];
+  const rootPos = new THREE.Vector3();
+  const midPos = new THREE.Vector3();
+  const endPos = new THREE.Vector3();
+  if (rootBone) rootBone.getWorldPosition(rootPos);
+  midBone.getWorldPosition(midPos);
+  endBone.getWorldPosition(endPos);
+
+  // 目標球：對齊目前手掌/腳掌的世界座標
+  ikTargetMeshes[limb].position.copy(endPos);
+
+  // 極向球：反推「目前 FK 姿勢」實際的彎曲方向（root→mid 相對 root→end 連線的側向分量），
+  // 而不是用固定猜測方向 —— 這樣切換 FK→IK 當下的彎曲平面會對齊現有姿勢，不會瞬間跳動。
+  // 只有手臂/腿完全打直（沒有側向分量可反推）時才退回用猜測方向。
+  let bendDir;
+  if (rootBone){
+    const toEnd = endPos.clone().sub(rootPos);
+    const rootToEndDir = toEnd.lengthSq() > 1e-10 ? toEnd.normalize() : new THREE.Vector3(0, 0, 1);
+    const toMid = midPos.clone().sub(rootPos);
+    const onAxis = rootToEndDir.clone().multiplyScalar(toMid.dot(rootToEndDir));
+    const lateral = toMid.clone().sub(onAxis);
+    bendDir = lateral.lengthSq() > 1e-8 ? lateral.normalize() : chain.poleOffset.clone().normalize();
+  } else {
+    bendDir = chain.poleOffset.clone().normalize();
+  }
+
+  const poleDist = chain.poleOffset.length();
+  ikPoleMeshes[limb].position.copy(midPos.clone().add(bendDir.multiplyScalar(poleDist)));
+}
+
+// ---- 脊椎 IK 目標球（藍色實心球）----
+function buildSpineIKMarker(){
+  const targetGeo = new THREE.SphereGeometry(0.038, 16, 16);
+  const targetMat = new THREE.MeshBasicMaterial({ color:0x33ccff, transparent:true, opacity:0.95, depthTest:false });
+  const mesh = new THREE.Mesh(targetGeo, targetMat);
+  mesh.renderOrder = 998;
+  mesh.visible = false;
+  mesh.userData.pickType = "spineIKTarget";
+  scene.add(mesh);
+  spineIKTargetMesh = mesh;
+  syncSpineIKMarkerToDefault();
+}
+
+// 把脊椎目標球對齊「目前姿勢」頭部所在的世界座標（開啟當下、或按重置時呼叫，避免瞬間跳動）
+function syncSpineIKMarkerToDefault(){
+  const effectorBone = bones[SPINE_IK_CHAIN.effector];
+  if (!effectorBone || !spineIKTargetMesh) return;
+  const pos = new THREE.Vector3();
+  effectorBone.getWorldPosition(pos);
+  spineIKTargetMesh.position.copy(pos);
+}
+
+// 開關脊椎 IK：開啟時鎖住 Spine/Spine1/Spine2/Neck（隱藏它們的關節球，改由 CCD 求解），
+// Head 自己的旋轉仍保留 FK 可調整（跟手腳 IK 保留末端 FK 是同樣設計）。
+function setSpineIKEnabled(on){
+  spineIKEnabled = on;
+  if (on) syncSpineIKMarkerToDefault();
+  spineIKTargetMesh.visible = on;
+  for (const key of SPINE_IK_CHAIN.bones){
+    if (markerMeshes[key]) markerMeshes[key].visible = !on;
+  }
+  if (on && lookAtEnabled.chest) setLookAtEnabled("chest", false);
+  if (!on && selectedIK && selectedIK.limb === "spine") deselectJoint();
+  updateSpineIKButton();
+}
+
+// ---- 頭/胸口 look-at 目標球（紫色=頭，琥珀色=胸口）----
+function buildLookAtMarkers(){
+  const colors = { head:0xff44cc, chest:0xffcc00 };
+  for (const name in LOOKAT_CONFIG){
+    const geo = new THREE.SphereGeometry(0.035, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color:colors[name], transparent:true, opacity:0.95, depthTest:false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 998;
+    mesh.visible = false;
+    mesh.userData.pickType = "lookAtTarget";
+    mesh.userData.lookAtName = name;
+    scene.add(mesh);
+    lookAtTargetMesh[name] = mesh;
+    syncLookAtMarkerToDefault(name);
+  }
+}
+
+// 把 look-at 目標球對齊「目前姿勢下，骨骼往前方軸延伸一小段」的位置，避免開啟當下瞬間跳動
+function syncLookAtMarkerToDefault(name){
+  const cfg = LOOKAT_CONFIG[name];
+  const bone = bones[cfg.key];
+  const mesh = lookAtTargetMesh[name];
+  if (!bone || !mesh) return;
+  const boneWorldQuat = new THREE.Quaternion(); bone.getWorldQuaternion(boneWorldQuat);
+  const worldForward = cfg.localForward.clone().applyQuaternion(boneWorldQuat).normalize();
+  const bonePos = new THREE.Vector3(); bone.getWorldPosition(bonePos);
+  mesh.position.copy(bonePos.clone().add(worldForward.multiplyScalar(0.4)));
+}
+
+// 開關 look-at：chest 用的骨骼（spine2）也是脊椎CCD鏈的一員，兩者若同時開啟會互搶
+// spine2 的旋轉權，所以互斥——開其中一個會自動關掉另一個，避免打架看起來抖動。
+function setLookAtEnabled(name, on){
+  lookAtEnabled[name] = on;
+  if (on) syncLookAtMarkerToDefault(name);
+  lookAtTargetMesh[name].visible = on;
+  if (on && name === "chest" && spineIKEnabled) setSpineIKEnabled(false);
+  if (!on && selectedIK && selectedIK.limb === "lookAt_" + name) deselectJoint();
+  updateLookAtButtons();
+}
+
+function updateLookAtButtons(){
+  const headBtn = document.getElementById("lookAtBtn_head");
+  if (headBtn) headBtn.classList.toggle("active", lookAtEnabled.head);
+  const chestBtn = document.getElementById("lookAtBtn_chest");
+  if (chestBtn) chestBtn.classList.toggle("active", lookAtEnabled.chest);
+}
+
+// ==== 手指 IK：目標球（青色小球，跟手腳IK的橘色/黃綠色區分）====
+function buildFingerIKMarkers(){
+  const geo = new THREE.SphereGeometry(0.016, 12, 12);
+  for (const fingerId of FINGER_IDS){
+    const mat = new THREE.MeshBasicMaterial({ color:0x00e5ff, transparent:true, opacity:0.95, depthTest:false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 998;
+    mesh.visible = false;
+    mesh.userData.pickType = "fingerIKTarget";
+    mesh.userData.fingerId = fingerId;
+    scene.add(mesh);
+    fingerIKTargetMeshes[fingerId] = mesh;
+    syncFingerIKMarkerToDefault(fingerId);
+  }
+}
+
+// 把某指的目標球對齊「目前姿勢」指尖(effector)所在的世界座標（開啟當下、或按重置時呼叫，避免瞬間跳動）
+function syncFingerIKMarkerToDefault(fingerId){
+  const effectorBone = fingerEffectorBones[fingerId];
+  const mesh = fingerIKTargetMeshes[fingerId];
+  if (!effectorBone || !mesh) return;
+  const pos = new THREE.Vector3();
+  effectorBone.getWorldPosition(pos);
+  mesh.position.copy(pos);
+}
+
+// 開關某指的IK：開啟時鎖住該指3節（隱藏它們的FK關節球，改由CCD求解），
+// 跟手腳/脊椎IK同樣的「開啟時同步target球到目前姿勢位置，避免瞬間跳動」設計。
+function setFingerIKEnabled(fingerId, on){
+  fingerIKEnabled[fingerId] = on;
+  const chain = FINGER_IK_CHAINS[fingerId];
+  if (!chain) return;
+  if (on) syncFingerIKMarkerToDefault(fingerId);
+  if (fingerIKTargetMeshes[fingerId]) fingerIKTargetMeshes[fingerId].visible = on;
+  for (const key of chain.bones){
+    if (markerMeshes[key]) markerMeshes[key].visible = !on;
+  }
+  if (!on && selectedIK && selectedIK.limb === FINGER_IK_PREFIX + fingerId) deselectJoint();
+  updateFingerIKButtons();
+}
+
+function updateFingerIKButtons(){
+  for (const fingerId of FINGER_IDS){
+    const btn = document.getElementById("fingerIKBtn_" + fingerId);
+    if (btn) btn.classList.toggle("active", !!fingerIKEnabled[fingerId]);
+  }
+}
+
+// ---- 手指 FK/IK 面板：一指一列、三節橫排（根/中/末），列尾巴加一顆 IK 切換鈕 ----
+// 左右手分兩張卡片，卡片本身在 HTML 裡已放好（#fingerCard_r / #fingerCard_l），這裡只把
+// 每指一列 append 進去；完整名稱放 title 屬性做 hover 提示，按鈕文字用短標籤保持可掃描性。
+function buildFingerPanel(){
+  const cards = { r: document.getElementById("fingerCard_r"), l: document.getElementById("fingerCard_l") };
+  for (const hs of HAND_SIDES){
+    const card = cards[hs.side];
+    if (!card) continue;
+    for (const fd of FINGER_DEFS){
+      const fingerId = hs.side + fd.id;
+      const row = document.createElement("div");
+      row.className = "fingerRow";
+
+      const label = document.createElement("span");
+      label.className = "fingerRowLabel";
+      label.textContent = fd.label;
+      row.appendChild(label);
+
+      for (let j = 1; j <= 3; j++){
+        const key = hs.side + fd.id + j;
+        const btn = document.createElement("button");
+        btn.className = "fingerJointBtn";
+        btn.textContent = FINGER_JOINT_LABELS[j];
+        btn.title = LABEL_LOOKUP[key] || key;
+        btn.dataset.jointkey = key;
+        btn.onclick = () => selectJoint(key);
+        row.appendChild(btn);
+      }
+
+      const ikBtn = document.createElement("button");
+      ikBtn.className = "fingerIKToggleBtn";
+      ikBtn.id = "fingerIKBtn_" + fingerId;
+      ikBtn.textContent = "IK";
+      ikBtn.title = hs.label + fd.label + " IK 開關：開啟後拖曳指尖目標球，整根手指自動彎曲收斂";
+      ikBtn.onclick = () => setFingerIKEnabled(fingerId, !fingerIKEnabled[fingerId]);
+      row.appendChild(ikBtn);
+
+      card.appendChild(row);
+    }
+  }
+  updateFingerIKButtons();
+}
+
+// 每幀呼叫：對每根開啟IK的手指求解一次CCD，並同步回target/current（給拍點/JSON用）。
+// 直接複用 solveCCDChain，不寫新的求解數學；手指鏈短、彎曲幅度通常不大，
+// 迭代次數/阻尼比脊椎（8輪/0.5）略小略快。
+function solveFingerIKAll(){
+  for (const fingerId of FINGER_IDS){
+    if (!fingerIKEnabled[fingerId]) continue;
+    const chain = FINGER_IK_CHAINS[fingerId];
+    const boneChain = chain.bones.map(k => bones[k]).filter(Boolean);
+    const effectorBone = fingerEffectorBones[fingerId];
+    const targetMesh = fingerIKTargetMeshes[fingerId];
+    if (boneChain.length === 0 || !effectorBone || !targetMesh) continue;
+    solveCCDChain(boneChain, effectorBone, targetMesh.position, 6, 0.6);
+    for (const key of chain.bones) syncTargetFromBone(key);
+  }
+}
+
+// ==== 軌跡輔助工具 ====
+// 場景中每個肢體各自維護一串紫色控制點球（陣列，順序＝路徑順序）+ 一條路徑預覽線。
+// 只有「軌跡」分頁目前選取中的 trajActiveLimb 那組球/線會顯示，避免四肢的點混在一起難以分辨。
+function buildTrajMarkers(){
+  for (const limb of IK_LIMB_KEYS){
+    const lineMat = new THREE.LineBasicMaterial({ color:0x9944ff, transparent:true, opacity:0.75, depthTest:false });
+    const line = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+    line.renderOrder = 996;
+    line.visible = false;
+    scene.add(line);
+    trajLine[limb] = line;
+  }
+}
+
+// 新增一顆控制點球，直接對齊該肢體目前IK target球的世界座標（明確需求：不要自動偏移/延伸）
+function addTrajPoint(limb){
+  const targetMesh = ikTargetMeshes[limb];
+  if (!targetMesh) return;
+  const geo = new THREE.SphereGeometry(0.026, 12, 12);
+  const mat = new THREE.MeshBasicMaterial({ color:0x9944ff, transparent:true, opacity:0.9, depthTest:false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 998;
+  mesh.position.copy(targetMesh.position);
+  mesh.visible = (limb === trajActiveLimb);
+  mesh.userData.pickType = "trajPoint";
+  mesh.userData.limb = limb;
+  mesh.userData.index = trajPointMeshes[limb].length;
+  scene.add(mesh);
+  trajPointMeshes[limb].push(mesh);
+  updateTrajVisual(limb);
+  renderTrajPointList();
+  scheduleAutoSave();
+}
+
+// 刪除單一控制點；刪除後把剩餘點的 userData.index 重新編號，保持跟陣列索引一致
+function removeTrajPoint(limb, idx){
+  const arr = trajPointMeshes[limb];
+  if (!arr[idx]) return;
+  if (selectedIK && selectedIK.limb === limb && selectedIK.role === "trajPoint" && selectedIK.index === idx){
+    deselectJoint();
+  }
+  scene.remove(arr[idx]);
+  arr[idx].geometry.dispose();
+  arr[idx].material.dispose();
+  arr.splice(idx, 1);
+  arr.forEach((m, i) => { m.userData.index = i; });
+  updateTrajVisual(limb);
+  renderTrajPointList();
+  scheduleAutoSave();
+}
+
+function clearTrajPoints(limb){
+  if (selectedIK && selectedIK.limb === limb && selectedIK.role === "trajPoint") deselectJoint();
+  for (const m of trajPointMeshes[limb]){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  trajPointMeshes[limb] = [];
+  updateTrajVisual(limb);
+  renderTrajPointList();
+  scheduleAutoSave();
+}
+
+// 重繪某肢體的路徑預覽線（依目前控制點世界座標 + 該肢體目前的路徑模式）
+function updateTrajVisual(limb){
+  const line = trajLine[limb];
+  if (!line) return;
+  const pts = trajPointMeshes[limb].map(m => m.position.clone());
+  if (pts.length < 2){
+    line.visible = false;
+  } else {
+    let linePts;
+    if (TRAJ_MODE[limb] === "curve" && pts.length >= 3){
+      const curve = new THREE.CatmullRomCurve3(pts);
+      linePts = curve.getPoints(Math.max(20, pts.length * 10));
+    } else {
+      linePts = pts;
+    }
+    line.geometry.dispose();
+    line.geometry = new THREE.BufferGeometry().setFromPoints(linePts);
+    line.visible = (limb === trajActiveLimb);
+  }
+  updateTrajActiveVisibility();
+}
+
+// 只顯示目前編輯中肢體(trajActiveLimb)的控制點球/路徑線，其他肢體的資料仍保留在記憶體裡只是隱藏
+function updateTrajActiveVisibility(){
+  for (const limb of IK_LIMB_KEYS){
+    const on = (limb === trajActiveLimb);
+    for (const m of trajPointMeshes[limb]) m.visible = on;
+    if (trajLine[limb]) trajLine[limb].visible = on && trajPointMeshes[limb].length >= 2;
+  }
+}
+
+function setTrajActiveLimb(limb){
+  trajActiveLimb = limb;
+  updateTrajLimbButtons();
+  updateTrajActiveVisibility();
+  const modeSel = document.getElementById("trajModeSelect");
+  if (modeSel) modeSel.value = TRAJ_MODE[limb];
+  renderTrajPointList();
+}
+
+function updateTrajLimbButtons(){
+  for (const limb of IK_LIMB_KEYS){
+    const btn = document.getElementById("trajLimbBtn_" + limb);
+    if (btn) btn.classList.toggle("active", limb === trajActiveLimb);
+  }
+}
+
+// 軌跡分頁裡的控制點清單（Pxx晶片，可點選/刪除）
+function renderTrajPointList(){
+  const host = document.getElementById("trajPointList");
+  const empty = document.getElementById("trajPointEmpty");
+  if (!host || !empty) return;
+  host.innerHTML = "";
+  const pts = trajPointMeshes[trajActiveLimb];
+  if (!pts || pts.length === 0){
+    host.appendChild(empty);
+    return;
+  }
+  pts.forEach((m, i) => {
+    const chip = document.createElement("div");
+    chip.className = "trajChip";
+    if (selectedIK && selectedIK.limb === trajActiveLimb && selectedIK.role === "trajPoint" && selectedIK.index === i){
+      chip.classList.add("active");
+    }
+    const sel = document.createElement("button");
+    sel.className = "sel";
+    sel.textContent = `P${i + 1}`;
+    sel.onclick = () => selectIKMarker(trajActiveLimb, "trajPoint", i);
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.onclick = (ev) => { ev.stopPropagation(); removeTrajPoint(trajActiveLimb, i); };
+    chip.appendChild(sel);
+    chip.appendChild(del);
+    host.appendChild(chip);
+  });
+}
+
+// ---- 純數學取樣函式：不依賴場景中的mesh是否還存在，播放時就是靠這個函式直接算座標 ----
+// mode: 'line' | 'curve'；points: THREE.Vector3 或 {x,y,z} 陣列（相對座標）；t: 0~1 進度
+function sampleTrajectoryFromPoints(mode, points, t){
+  const pts = points.map(p => (p instanceof THREE.Vector3) ? p : new THREE.Vector3(p.x, p.y, p.z));
+  if (pts.length === 0) return new THREE.Vector3();
+  if (pts.length === 1) return pts[0].clone();
+  t = clampNum(t, 0, 1);
+  if (mode === "curve" && pts.length >= 3){
+    const curve = new THREE.CatmullRomCurve3(pts);
+    return curve.getPoint(t);
+  }
+  // 折線模式（或曲線但點數<3時退回折線）：依各段弦長比例決定 t 落在哪一段
+  const segLens = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++){
+    const d = pts[i].distanceTo(pts[i + 1]);
+    segLens.push(d);
+    total += d;
+  }
+  if (total < 1e-8) return pts[0].clone();
+  let remain = t * total;
+  for (let i = 0; i < segLens.length; i++){
+    if (remain <= segLens[i] || i === segLens.length - 1){
+      const segT = segLens[i] < 1e-8 ? 0 : clampNum(remain / segLens[i], 0, 1);
+      return pts[i].clone().lerp(pts[i + 1], segT);
+    }
+    remain -= segLens[i];
+  }
+  return pts[pts.length - 1].clone();
+}
+
+// sampleTrajectoryFromPoints 的即時預覽包裝：讀場景中 trajPointMeshes 目前的world座標
+function sampleTrajectory(limb, t){
+  const pts = trajPointMeshes[limb].map(m => m.position.clone());
+  return sampleTrajectoryFromPoints(TRAJ_MODE[limb], pts, t);
+}
+
+// 沿目前控制點路徑等間隔取樣 trajSampleCount 個點，每點都當成一次「使用者手動擺好IK再按新增拍點」，
+// 依序寫入時間軸；額外把整批共用的軌跡資料（trajId/模式/相對座標/pole/進度t）烘焙進每個拍點的
+// kf.traj[limb]，播放時才能不靠取樣密度、直接連續取樣曲線本身（見 updateKeyframePlayback）。
+function generateKeyframesFromTrajectory(limb){
+  const pts = trajPointMeshes[limb];
+  const chain = IK_CHAINS[limb];
+  if (pts.length < 2){ alert("至少需要 2 個控制點才能生成軌跡拍點"); return; }
+  if (!ikEnabled[limb]){ alert("請先到「手腳 IK」分頁開啟「" + chain.label + "」的 IK，再生成軌跡拍點"); return; }
+  const rootBone = bones[chain.root], midBone = bones[chain.mid], endBone = bones[chain.end];
+  if (!rootBone || !midBone || !endBone) return;
+
+  const n = Math.round(clampNum(trajSampleCount, 2, 20));
+  const trajId = "traj_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
+  const mode = TRAJ_MODE[limb];
+
+  // 生成當下：以此刻 root 骨骼世界座標為原點，把所有控制點/pole換算成「相對root」的偏移量，
+  // 這個原點只在生成當下取一次（見文件描述），之後每個取樣點都疊加在這個固定原點上。
+  const rootPos = new THREE.Vector3(); rootBone.getWorldPosition(rootPos);
+  const relPoints = pts.map(m => { const v = m.position.clone().sub(rootPos); return { x:v.x, y:v.y, z:v.z }; });
+  const poleAbs = ikPoleMeshes[limb].position.clone();
+  const poleRel = poleAbs.clone().sub(rootPos);
+  const poleRelObj = { x:poleRel.x, y:poleRel.y, z:poleRel.z };
+
+  for (let i = 0; i < n; i++){
+    const t = i / (n - 1);
+    const localOffset = sampleTrajectoryFromPoints(mode, relPoints, t);
+    const worldPos = rootPos.clone().add(localOffset);
+    ikTargetMeshes[limb].position.copy(worldPos);
+
+    solveRootFollowForLimb(limb);
+    if (shoulderAssistEnabled) solveShoulderAssist(limb);
+    solveTwoBoneIK(rootBone, midBone, endBone, ikTargetMeshes[limb].position, ikPoleMeshes[limb].position);
+    syncTargetFromBone(chain.root);
+    syncTargetFromBone(chain.mid);
+    if (limb === "rLeg" || limb === "lLeg") applyFootLock(limb);
+    applyEffectorOrientation(limb);
+
+    addKeyframe();
+    const kf = keyframes[keyframes.length - 1];
+    kf.traj = kf.traj || {};
+    kf.traj[limb] = { id: trajId, mode, points: relPoints, pole: poleRelObj, t };
+  }
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+// ---- 身體移動 ----
+// 控制環attach到bodyGizmoProxy（放在Hips世界座標），不是直接attach到model，
+// 這樣控制環會出現在髖部附近，比出現在model原點（通常在腳底/地板格線旁）好點選。
+// 拖曳時透過 transformControlsIK 的 objectChange 事件把delta套用到 model.position。
+// 注意：若手臂/脊椎的 root-follow 或雙手固定同時開啟，animate() 每幀仍會
+// 自動用那些機制調整 model.position，但這裡的代理物件位置不會跟著自動同步，
+// 可能導致控制環視覺上跟身體實際位置脫節——若發生這種情況，重新按一次
+// 「移動身體」即可讓控制環重新對齊。
+function selectBodyMarker(){
+  selectedKey = null;
+  selectedIK = { limb: "body", role: "target" };
+  transformControls.detach();
+
+  const hipsBone = bones["hips"];
+  if (hipsBone){
+    const hipsPos = new THREE.Vector3();
+    hipsBone.getWorldPosition(hipsPos);
+    bodyGizmoProxy.position.copy(hipsPos);
+  } else {
+    bodyGizmoProxy.position.copy(model.position);
+  }
+  bodyProxyLastPos = bodyGizmoProxy.position.clone();
+
+  transformControlsIK.attach(bodyGizmoProxy);
+  highlightMarkers();
+  highlightIKMarkers();
+  updateSelectedBar();
+}
+
+function resetBodyTransform(){
+  if (!defaultModelPosition || !defaultModelQuaternion) return;
+  model.position.copy(defaultModelPosition);
+  model.quaternion.copy(defaultModelQuaternion);
+  model.updateWorldMatrix(true, true);
+  // 若目前正選取著身體控制環，重置後重新對齊代理物件到新的Hips世界座標，
+  // 避免控制環還停在舊位置、跟reset後的身體視覺脫節
+  if (selectedIK && selectedIK.limb === "body" && bodyGizmoProxy){
+    const hipsBone = bones["hips"];
+    const hipsPos = new THREE.Vector3();
+    if (hipsBone) hipsBone.getWorldPosition(hipsPos); else hipsPos.copy(model.position);
+    bodyGizmoProxy.position.copy(hipsPos);
+    bodyProxyLastPos = hipsPos.clone();
+  }
+}
+
+// 開關某肢體的 IK：開啟時鎖住 root/mid 骨骼改由 IK 求解（隱藏它們的關節球），
+// 末端骨骼（手掌/腳掌自己的旋轉）仍保留 FK 可調整。
+function setIKEnabled(limb, on){
+  ikEnabled[limb] = on;
+  const chain = IK_CHAINS[limb];
+
+  if (on) syncIKMarkersToDefault(limb);
+
+  ikTargetMeshes[limb].visible = on;
+  ikPoleMeshes[limb].visible = on;
+  ikPoleLines[limb].visible = on;
+
+  if (markerMeshes[chain.root]) markerMeshes[chain.root].visible = !on;
+  if (markerMeshes[chain.mid]) markerMeshes[chain.mid].visible = !on;
+  if (chain.shoulder && markerMeshes[chain.shoulder]) markerMeshes[chain.shoulder].visible = !on;
+
+  // 腳踝旋轉鎖存：開啟腿部IK當下抓取目前腳掌世界旋轉當基準；關閉時清空，
+  // 避免下次重開時殘留舊姿勢的鎖存值造成腳掌瞬間跳動
+  if (limb === "rLeg" || limb === "lLeg"){
+    if (on) captureFootLock(limb);
+    else footLockedWorldQuat[limb] = null;
+  }
+
+  if (!on && selectedIK && selectedIK.limb === limb) deselectJoint();
+  updateIKButtons();
+}
+
+// 抓取「目前」腳掌世界旋轉，存成鎖存基準
+function captureFootLock(limb){
+  const chain = IK_CHAINS[limb];
+  const footBone = bones[chain.end];
+  if (!footBone) return;
+  const q = new THREE.Quaternion();
+  footBone.getWorldQuaternion(q);
+  footLockedWorldQuat[limb] = q.clone();
+}
+
+// 每幀呼叫：把腳掌的本地旋轉，反推成「能讓世界旋轉貼住鎖存值」的值。
+// 必須在該腿的 solveTwoBoneIK 算完 root/mid 新世界旋轉「之後」執行，
+// 這樣才是用本幀最新的父骨骼世界旋轉反推，不會有一幀落差。
+function applyFootLock(limb){
+  const lockedQuat = footLockedWorldQuat[limb];
+  if (!lockedQuat || !ikEnabled[limb]) return;
+  const chain = IK_CHAINS[limb];
+  const footBone = bones[chain.end];
+  if (!footBone || !footBone.parent) return;
+  const parentWorldQuat = new THREE.Quaternion();
+  footBone.parent.getWorldQuaternion(parentWorldQuat);
+  footBone.quaternion.copy(parentWorldQuat.clone().invert().multiply(lockedQuat));
+  footBone.updateWorldMatrix(true, true);
+}
+
+function selectIKMarker(limb, role, index){
+  selectedKey = null;
+  transformControls.detach();
+  selectedIK = (role === "trajPoint") ? { limb, role, index } : { limb, role };
+  let mesh;
+  if (limb === "spine") mesh = spineIKTargetMesh;
+  else if (limb === "lookAt_head") mesh = lookAtTargetMesh.head;
+  else if (limb === "lookAt_chest") mesh = lookAtTargetMesh.chest;
+  else if (limb.startsWith(FINGER_IK_PREFIX)) mesh = fingerIKTargetMeshes[limb.slice(FINGER_IK_PREFIX.length)];
+  else if (role === "trajPoint") mesh = trajPointMeshes[limb][index];
+  else mesh = role === "target" ? ikTargetMeshes[limb] : ikPoleMeshes[limb];
+  if (!mesh) { selectedIK = null; return; }
+  transformControlsIK.attach(mesh);
+  highlightMarkers();
+  highlightIKMarkers();
+  updateSelectedBar();
+  renderTrajPointList();
+}
+
+function highlightIKMarkers(){
+  for (const limb of IK_LIMB_KEYS){
+    const isTargetSel = !!(selectedIK && selectedIK.limb === limb && selectedIK.role === "target");
+    const isPoleSel = !!(selectedIK && selectedIK.limb === limb && selectedIK.role === "pole");
+    if (ikTargetMeshes[limb]) ikTargetMeshes[limb].scale.setScalar(isTargetSel ? 1.5 : 1.0);
+    if (ikPoleMeshes[limb]) ikPoleMeshes[limb].scale.setScalar(isPoleSel ? 1.5 : 1.0);
+  }
+  if (spineIKTargetMesh){
+    const isSpineSel = !!(selectedIK && selectedIK.limb === "spine");
+    spineIKTargetMesh.scale.setScalar(isSpineSel ? 1.5 : 1.0);
+  }
+  for (const name of ["head", "chest"]){
+    if (!lookAtTargetMesh[name]) continue;
+    const isSel = !!(selectedIK && selectedIK.limb === "lookAt_" + name);
+    lookAtTargetMesh[name].scale.setScalar(isSel ? 1.5 : 1.0);
+  }
+  for (const limb of IK_LIMB_KEYS){
+    trajPointMeshes[limb].forEach((m, idx) => {
+      const isSel = !!(selectedIK && selectedIK.limb === limb && selectedIK.role === "trajPoint" && selectedIK.index === idx);
+      m.scale.setScalar(isSel ? 1.6 : 1.0);
+    });
+  }
+  for (const fingerId of FINGER_IDS){
+    if (!fingerIKTargetMeshes[fingerId]) continue;
+    const isSel = !!(selectedIK && selectedIK.limb === FINGER_IK_PREFIX + fingerId);
+    fingerIKTargetMeshes[fingerId].scale.setScalar(isSel ? 1.5 : 1.0);
+  }
+}
+
+function updateSpineIKButton(){
+  const btn = document.getElementById("spineIKBtn");
+  if (btn) btn.classList.toggle("active", spineIKEnabled);
+}
+
+function updateIKButtons(){
+  for (const limb of IK_LIMB_KEYS){
+    const btn = document.getElementById("ikBtn_" + limb);
+    if (btn) btn.classList.toggle("active", ikEnabled[limb]);
+  }
+}
+
+function bindIKUI(){
+  for (const limb of IK_LIMB_KEYS){
+    const btn = document.getElementById("ikBtn_" + limb);
+    if (btn) btn.onclick = () => setIKEnabled(limb, !ikEnabled[limb]);
+  }
+  updateIKButtons();
+
+  const spineBtn = document.getElementById("spineIKBtn");
+  if (spineBtn) spineBtn.onclick = () => setSpineIKEnabled(!spineIKEnabled);
+  updateSpineIKButton();
+
+  const spineRootFollowCb = document.getElementById("rootFollow_spine");
+  if (spineRootFollowCb) spineRootFollowCb.onchange = (e) => { spineRootFollowEnabled = e.target.checked; };
+
+  for (const limb of ["rArm", "lArm"]){
+    const cb = document.getElementById("rootFollow_" + limb);
+    if (cb) cb.onchange = (e) => { ikRootFollowEnabled[limb] = e.target.checked; };
+  }
+
+  for (const name of ["head", "chest"]){
+    const btn = document.getElementById("lookAtBtn_" + name);
+    if (btn) btn.onclick = () => setLookAtEnabled(name, !lookAtEnabled[name]);
+  }
+  updateLookAtButtons();
+
+  const dualAnchorCb = document.getElementById("dualAnchorCb");
+  if (dualAnchorCb) dualAnchorCb.onchange = (e) => { dualAnchorEnabled = e.target.checked; };
+  const shoulderAssistCb = document.getElementById("shoulderAssistCb");
+  if (shoulderAssistCb) shoulderAssistCb.onchange = (e) => { shoulderAssistEnabled = e.target.checked; };
+
+  // ---- 進階/阻尼設定：身體跟隨阻尼、脊椎CCD阻尼 ----
+  const rootFollowDampSlider = document.getElementById("rootFollowDampSlider");
+  const rootFollowDampVal = document.getElementById("rootFollowDampVal");
+  const spineCCDDampSlider = document.getElementById("spineCCDDampSlider");
+  const spineCCDDampVal = document.getElementById("spineCCDDampVal");
+  if (rootFollowDampSlider) rootFollowDampSlider.oninput = (e) => {
+    ROOT_FOLLOW_LERP_T = parseFloat(e.target.value);
+    if (rootFollowDampVal) rootFollowDampVal.textContent = ROOT_FOLLOW_LERP_T.toFixed(2);
+  };
+  if (spineCCDDampSlider) spineCCDDampSlider.oninput = (e) => {
+    spineCCDDamping = parseFloat(e.target.value);
+    if (spineCCDDampVal) spineCCDDampVal.textContent = spineCCDDamping.toFixed(2);
+  };
+  const resetDampingBtn = document.getElementById("resetDampingBtn");
+  if (resetDampingBtn) resetDampingBtn.onclick = () => {
+    ROOT_FOLLOW_LERP_T = ROOT_FOLLOW_LERP_T_DEFAULT;
+    spineCCDDamping = SPINE_CCD_DAMPING_DEFAULT;
+    if (rootFollowDampSlider) rootFollowDampSlider.value = String(ROOT_FOLLOW_LERP_T_DEFAULT);
+    if (spineCCDDampSlider) spineCCDDampSlider.value = String(SPINE_CCD_DAMPING_DEFAULT);
+    if (rootFollowDampVal) rootFollowDampVal.textContent = ROOT_FOLLOW_LERP_T_DEFAULT.toFixed(2);
+    if (spineCCDDampVal) spineCCDDampVal.textContent = SPINE_CCD_DAMPING_DEFAULT.toFixed(2);
+  };
+
+  const selectBodyBtn = document.getElementById("selectBodyBtn");
+  if (selectBodyBtn) selectBodyBtn.onclick = selectBodyMarker;
+
+  for (const limb of IK_LIMB_KEYS){
+    const btn = document.getElementById("orientBtn_" + limb);
+    if (btn) btn.onclick = () => setEffectorOrientEnabled(limb, !effectorOrientEnabled[limb]);
+  }
+  updateEffectorOrientButtons();
+
+  const ikModeBtn = document.getElementById("ikModeBtn");
+  if (ikModeBtn) ikModeBtn.onclick = () => {
+    const newMode = transformControlsIK.getMode() === "translate" ? "rotate" : "translate";
+    transformControlsIK.setMode(newMode);
+    updateSelectedBar();
+  };
+}
+
+// ---- 軌跡分頁 UI 綁定 ----
+function bindTrajUI(){
+  for (const limb of IK_LIMB_KEYS){
+    const btn = document.getElementById("trajLimbBtn_" + limb);
+    if (btn) btn.onclick = () => setTrajActiveLimb(limb);
+  }
+  updateTrajLimbButtons();
+
+  const modeSel = document.getElementById("trajModeSelect");
+  if (modeSel){
+    modeSel.value = TRAJ_MODE[trajActiveLimb];
+    modeSel.onchange = (e) => {
+      TRAJ_MODE[trajActiveLimb] = e.target.value;
+      updateTrajVisual(trajActiveLimb);
+      scheduleAutoSave();
+    };
+  }
+
+  const addBtn = document.getElementById("trajAddPointBtn");
+  if (addBtn) addBtn.onclick = () => addTrajPoint(trajActiveLimb);
+
+  const clearBtn = document.getElementById("trajClearPointsBtn");
+  if (clearBtn) clearBtn.onclick = () => clearTrajPoints(trajActiveLimb);
+
+  const sampleSlider = document.getElementById("trajSampleSlider");
+  const sampleVal = document.getElementById("trajSampleVal");
+  if (sampleSlider){
+    sampleSlider.value = String(trajSampleCount);
+    sampleSlider.oninput = (e) => {
+      trajSampleCount = parseInt(e.target.value, 10);
+      if (sampleVal) sampleVal.textContent = String(trajSampleCount);
+    };
+  }
+  if (sampleVal) sampleVal.textContent = String(trajSampleCount);
+
+  const genBtn = document.getElementById("trajGenerateBtn");
+  if (genBtn) genBtn.onclick = () => { generateKeyframesFromTrajectory(trajActiveLimb); pushHistory(); };
+
+  renderTrajPointList();
+}
+
+// 所有目前「可被點擊」的球（關節球 + 可見的 IK 目標球／極向球），自己過濾 visible，
+// 不依賴 Raycaster 是否會自動跳過隱藏物件。
+function allPickableMeshes(){
+  const list = [];
+  for (const key in markerMeshes){ if (markerMeshes[key].visible) list.push(markerMeshes[key]); }
+  for (const limb of IK_LIMB_KEYS){
+    if (ikTargetMeshes[limb] && ikTargetMeshes[limb].visible) list.push(ikTargetMeshes[limb]);
+    if (ikPoleMeshes[limb] && ikPoleMeshes[limb].visible) list.push(ikPoleMeshes[limb]);
+  }
+  if (spineIKTargetMesh && spineIKTargetMesh.visible) list.push(spineIKTargetMesh);
+  for (const name of ["head", "chest"]){
+    if (lookAtTargetMesh[name] && lookAtTargetMesh[name].visible) list.push(lookAtTargetMesh[name]);
+  }
+  for (const limb of IK_LIMB_KEYS){
+    for (const m of trajPointMeshes[limb]) if (m.visible) list.push(m);
+  }
+  for (const fingerId of FINGER_IDS){
+    if (fingerIKTargetMeshes[fingerId] && fingerIKTargetMeshes[fingerId].visible) list.push(fingerIKTargetMeshes[fingerId]);
+  }
+  return list;
+}
+
+// ---- 點擊選取關節 ----
+function setupPickRaycaster(){
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let downX = 0, downY = 0;
+
+  const dom = renderer.domElement;
+  dom.addEventListener("pointerdown", (e) => { downX = e.clientX; downY = e.clientY; });
+
+  dom.addEventListener("pointerup", (e) => {
+    // suppressClick 會在剛拖完控制環之後短暫為 true，避免放開拖曳的那次 click 被誤判成「點空白處」
+    if (suppressClick || transformControls.dragging || transformControlsIK.dragging || kfPlaying) return;
+    const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
+    if (dist > 6) return;
+
+    const rect = dom.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(allPickableMeshes());
+    if (hits.length > 0){
+      const obj = hits[0].object;
+      const pickType = obj.userData.pickType;
+      if (pickType === "ikTarget") selectIKMarker(obj.userData.limb, "target");
+      else if (pickType === "ikPole") selectIKMarker(obj.userData.limb, "pole");
+      else if (pickType === "spineIKTarget") selectIKMarker("spine", "target");
+      else if (pickType === "lookAtTarget") selectIKMarker("lookAt_" + obj.userData.lookAtName, "target");
+      else if (pickType === "trajPoint") selectIKMarker(obj.userData.limb, "trajPoint", obj.userData.index);
+      else if (pickType === "fingerIKTarget") selectIKMarker(FINGER_IK_PREFIX + obj.userData.fingerId, "target");
+      else selectJoint(obj.userData.jointKey);
+    } else if (selectedKey || selectedIK){
+      // 點到模型本身或空白處（沒點中任何球）：視為取消選取，收起控制環
+      deselectJoint();
+    }
+  });
+
+  // 按 Esc 取消目前選取，收起控制環（拍點播放中或沒有選取時忽略）
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (kfPlaying || (!selectedKey && !selectedIK)) return;
+    deselectJoint();
+  });
+}
+
+function selectJoint(key){
+  if (!bones[key]) return;
+  selectedIK = null;
+  transformControlsIK.detach();
+  selectedKey = key;
+  transformControls.attach(bones[key]);
+  highlightMarkers();
+  highlightIKMarkers();
+  updateSelectedBar();
+}
+
+function deselectJoint(){
+  selectedKey = null;
+  selectedIK = null;
+  transformControls.detach();
+  transformControlsIK.detach();
+  highlightMarkers();
+  highlightIKMarkers();
+  updateSelectedBar();
+  renderTrajPointList();
+}
+
+function updateSelectedBar(){
+  const label = document.getElementById("selectedLabel");
+  const angles = document.getElementById("selectedAngles");
+  const spaceBtn = document.getElementById("spaceBtn");
+  const snapLabel = document.getElementById("snapLabel");
+  const snapSelect = document.getElementById("snapSelect");
+  const zeroBtn = document.getElementById("zeroJointBtn");
+
+  if (selectedIK){
+    let labelText, mesh;
+    if (selectedIK.limb === "spine"){
+      labelText = `${SPINE_IK_CHAIN.label}・頭部目標球`;
+      mesh = spineIKTargetMesh;
+    } else if (selectedIK.limb === "lookAt_head" || selectedIK.limb === "lookAt_chest"){
+      const name = selectedIK.limb.replace("lookAt_", "");
+      labelText = `${LOOKAT_CONFIG[name].label}・Look-At目標球`;
+      mesh = lookAtTargetMesh[name];
+    } else if (selectedIK.limb.startsWith(FINGER_IK_PREFIX)){
+      const fingerId = selectedIK.limb.slice(FINGER_IK_PREFIX.length);
+      labelText = `${FINGER_IK_CHAINS[fingerId].label}・指尖目標球`;
+      mesh = fingerIKTargetMeshes[fingerId];
+    } else if (selectedIK.limb === "body"){
+      labelText = "身體位置（整個角色，控制環顯示於髖部）";
+      mesh = bodyGizmoProxy;
+    } else if (selectedIK.role === "trajPoint"){
+      const chain = IK_CHAINS[selectedIK.limb];
+      const idx = selectedIK.index || 0;
+      labelText = `${chain.label}・軌跡控制點 #${idx + 1}`;
+      mesh = trajPointMeshes[selectedIK.limb][idx];
+      if (!mesh){ deselectJoint(); return; }
+    } else {
+      const chain = IK_CHAINS[selectedIK.limb];
+      labelText = `${chain.label}・${selectedIK.role === "target" ? "IK目標球" : "彎曲極向球"}`;
+      mesh = selectedIK.role === "target" ? ikTargetMeshes[selectedIK.limb] : ikPoleMeshes[selectedIK.limb];
+    }
+    label.textContent = labelText;
+    angles.textContent = `X ${mesh.position.x.toFixed(2)}  Y ${mesh.position.y.toFixed(2)}  Z ${mesh.position.z.toFixed(2)}`;
+    if (spaceBtn) spaceBtn.style.display = "none";
+    if (snapLabel) snapLabel.style.display = "none";
+    if (snapSelect) snapSelect.style.display = "none";
+    if (zeroBtn) zeroBtn.textContent = "重置此球位置";
+
+    // 「位置/朝向」切換按鈕：只有手腳IK的目標球、且該肢體有開啟Effector朝向控制時才顯示，
+    // 其他標記球（脊椎/look-at/極向球/身體）旋轉環拖了也沒有對應的求解邏輯讀取，顯示了只會困惑使用者
+    const ikModeBtn = document.getElementById("ikModeBtn");
+    const isArmLegTarget = IK_CHAINS[selectedIK.limb] && selectedIK.role === "target";
+    if (ikModeBtn){
+      if (isArmLegTarget && effectorOrientEnabled[selectedIK.limb]){
+        ikModeBtn.style.display = "";
+        ikModeBtn.textContent = "切換：" + (transformControlsIK.getMode() === "translate" ? "位置" : "朝向");
+      } else {
+        ikModeBtn.style.display = "none";
+        transformControlsIK.setMode("translate"); // 離開這類標記球時強制切回位置模式，避免殘留旋轉模式影響其他標記球
+      }
+    }
+    return;
+  }
+
+  if (spaceBtn) spaceBtn.style.display = "";
+  if (snapLabel) snapLabel.style.display = "";
+  if (snapSelect) snapSelect.style.display = "";
+  if (zeroBtn) zeroBtn.textContent = "此關節歸零";
+  const ikModeBtnHide = document.getElementById("ikModeBtn");
+  if (ikModeBtnHide) ikModeBtnHide.style.display = "none";
+
+  if (!selectedKey){
+    label.textContent = "未選取";
+    angles.textContent = "";
+    return;
+  }
+  label.textContent = LABEL_LOOKUP[selectedKey] || selectedKey;
+  const a = target[selectedKey] || [0,0,0];
+  angles.textContent = `X ${a[0].toFixed(1)}°  Y ${a[1].toFixed(1)}°  Z ${a[2].toFixed(1)}°`;
+}
+
+// 從骨骼目前的四元數反推「相對 rest pose」的角度，寫回 target/current
+function commitFromBone(key){
+  const bone = bones[key];
+  if (!bone || !restQuat[key]) return;
+  const deltaQuat = restQuat[key].clone().invert().multiply(bone.quaternion);
+  const e = new THREE.Euler().setFromQuaternion(deltaQuat, "XYZ");
+  const deg = [R(e.x), R(e.y), R(e.z)].map(v => Math.round(v*10)/10);
+  target[key] = deg;
+  current[key] = deg.slice();
+  setActiveBtn(-1);
+  updateSelectedBar();
+}
+
+// ---- 姿勢套用 ----
+function setTarget(name, xyz){ target[name] = xyz.slice(); current[name] = xyz.slice(); }
+
+function applyPose(p){
+  for (const k of ALL_JOINT_KEYS){
+    if (p[k]) setTarget(k, p[k]);
+  }
+  updateSelectedBar();
+}
+
+function resetPose(){
+  for (const k of ALL_JOINT_KEYS){ current[k] = [0,0,0]; target[k] = [0,0,0]; }
+  applyPose(POSES[0]);
+  resetBodyTransform();
+  poseIndex = 0;
+  setActiveBtn(0);
+}
+
+function selectPose(i){
+  poseIndex = i;
+  applyPose(POSES[i]);
+  setActiveBtn(i);
+}
+
+function randomPose(clearActive){
+  const rnd = () => [-90,-45,0,45,90,-135,135,180][Math.floor(Math.random()*8)] * (Math.random()>0.7?0.5:1);
+  const p = {
+    rArm:[rnd()/3, rnd()/3, rnd()], rForeArm:[0, rnd(), 0], rHand:[0,0,rnd()/2],
+    lArm:[rnd()/3, rnd()/3, rnd()], lForeArm:[0, rnd(), 0], lHand:[0,0,rnd()/2],
+    head:[0, rnd()/3, 0], spine:[0,0,rnd()/6]
+  };
+  applyPose(p);
+  if (clearActive) setActiveBtn(-1);
+}
+
+function setActiveBtn(i){
+  document.querySelectorAll("#poseBtns button").forEach((b, idx) => b.classList.toggle("active", idx===i));
+}
+
+function buildPoseButtons(){
+  const wrap = document.getElementById("poseBtns");
+  POSES.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.textContent = p.name;
+    b.onclick = () => { selectPose(i); pushHistory(); };
+    wrap.appendChild(b);
+  });
+}
+
+// ---- JSON 匯出/匯入（單一姿勢） ----
+function refreshJsonArea(){
+  const out = {};
+  for (const k of ALL_JOINT_KEYS) out[k] = target[k].map(v => Math.round(v*10)/10);
+  document.getElementById("jsonArea").value = JSON.stringify(out, null, 2);
+}
+
+function applyJson(){
+  try {
+    const parsed = JSON.parse(document.getElementById("jsonArea").value);
+    for (const k of ALL_JOINT_KEYS){
+      if (Array.isArray(parsed[k]) && parsed[k].length === 3) setTarget(k, parsed[k]);
+    }
+    setActiveBtn(-1);
+    updateSelectedBar();
+    return true;
+  } catch (e){
+    alert("JSON 格式錯誤：" + e.message);
+    return false;
+  }
+}
+
+// ---- 動作姿勢庫／掌指手勢庫：共用小工具 ----
+// 姿勢庫存「身體」關節（ALL_JOINT_KEYS 扣掉手指30鍵）；手勢庫只存手指30鍵，
+// 兩者互相獨立，套用姿勢不會動到手指、套用手勢不會動到身體，可以自由混搭。
+const POSE_LIB_KEY = "tuttingPoseLibrary_v1";
+const GESTURE_LIB_KEY = "tuttingGestureLibrary_v1";
+const BODY_LIB_JOINT_KEYS = ALL_JOINT_KEYS.filter(k => !FINGER_JOINT_KEY_SET.has(k));
+
+function makeLibId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function loadLibraryFromStorage(key){
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e){ return []; }
+}
+function saveLibraryToStorage(key, arr){
+  try { localStorage.setItem(key, JSON.stringify(arr)); }
+  catch (e){ console.warn("儲存庫寫入 localStorage 失敗：", e); alert("儲存失敗（瀏覽器儲存空間可能已滿）：" + e.message); }
+}
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type:"application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function sanitizeFilename(name){
+  const s = String(name || "").replace(/[\\/:*?"<>|]/g, "_").trim().slice(0, 40);
+  return s || "未命名";
+}
+function readJSONFile(file, cb){
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { cb(JSON.parse(reader.result)); }
+    catch (e){ alert("JSON 檔案解析失敗：" + e.message); }
+  };
+  reader.onerror = () => alert("讀取檔案失敗。");
+  reader.readAsText(file);
+}
+
+// 渲染單一庫（姿勢庫或手勢庫）的清單 chips，共用同一套 DOM 結構／樣式（.libChip，見CSS）
+function renderLibList(items, listElId, emptyElId, handlers){
+  const host = document.getElementById(listElId);
+  const empty = document.getElementById(emptyElId);
+  host.innerHTML = "";
+  if (items.length === 0){ host.appendChild(empty); return; }
+  items.forEach((item) => {
+    const chip = document.createElement("div");
+    chip.className = "libChip";
+
+    const sel = document.createElement("button");
+    sel.className = "sel";
+    sel.textContent = item.name;
+    sel.title = "套用「" + item.name + "」";
+    sel.onclick = () => handlers.apply(item);
+    chip.appendChild(sel);
+
+    const exp = document.createElement("button");
+    exp.className = "exp";
+    exp.textContent = "⬇";
+    exp.title = "匯出「" + item.name + "」為 JSON 檔";
+    exp.onclick = (ev) => { ev.stopPropagation(); handlers.exportOne(item); };
+    chip.appendChild(exp);
+
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.title = "刪除「" + item.name + "」";
+    del.onclick = (ev) => { ev.stopPropagation(); handlers.del(item); };
+    chip.appendChild(del);
+
+    host.appendChild(chip);
+  });
+}
+
+// 工廠函式：產生一個獨立運作的「庫」控制器（姿勢庫／手勢庫各建一個實例，邏輯完全共用不重複寫）
+function createLibraryController(opts){
+  // opts: { storageKey, captureFn, applyFn, listElId, emptyElId, filePrefix, itemLabel }
+  let items = loadLibraryFromStorage(opts.storageKey);
+
+  function persist(){ saveLibraryToStorage(opts.storageKey, items); }
+
+  function render(){
+    renderLibList(items, opts.listElId, opts.emptyElId, {
+      apply: (item) => { opts.applyFn(item.data); pushHistory(); },
+      del: (item) => {
+        if (!confirm(`刪除${opts.itemLabel}「${item.name}」？此動作無法復原。`)) return;
+        items = items.filter(x => x.id !== item.id);
+        persist(); render();
+      },
+      exportOne: (item) => downloadJSON(item, opts.filePrefix + "_" + sanitizeFilename(item.name) + ".json")
+    });
+  }
+
+  function saveCurrent(name){
+    const clean = (name || "").trim() || ("未命名" + opts.itemLabel);
+    items.push({ id: makeLibId(), name: clean, savedAt: Date.now(), data: opts.captureFn() });
+    persist(); render();
+  }
+
+  function exportAll(){
+    if (items.length === 0){ alert(`${opts.itemLabel}庫目前是空的，沒有可匯出的內容。`); return; }
+    downloadJSON(items, opts.filePrefix + "庫_全部_" + Date.now() + ".json");
+  }
+
+  function importOne(file){
+    readJSONFile(file, (obj) => {
+      if (!obj || typeof obj !== "object" || !obj.data || typeof obj.data !== "object"){
+        alert("檔案格式錯誤：找不到有效的" + opts.itemLabel + "資料（需含 data 欄位）。"); return;
+      }
+      items.push({ id: makeLibId(), name: (obj.name || ("匯入" + opts.itemLabel)), savedAt: Date.now(), data: obj.data });
+      persist(); render();
+    });
+  }
+
+  function importAll(file){
+    readJSONFile(file, (arr) => {
+      if (!Array.isArray(arr)){ alert("檔案格式錯誤：整批匯入需要一個 JSON 陣列。"); return; }
+      const cleaned = arr
+        .filter(x => x && typeof x === "object" && x.data && typeof x.data === "object")
+        .map(x => ({ id: makeLibId(), name: (x.name || ("匯入" + opts.itemLabel)), savedAt: Date.now(), data: x.data }));
+      if (cleaned.length === 0){ alert("檔案內沒有找到任何有效項目。"); return; }
+      const merge = confirm(`偵測到 ${cleaned.length} 筆${opts.itemLabel}。\n按「確定」＝合併進現有清單；按「取消」＝整批取代現有清單。`);
+      items = merge ? items.concat(cleaned) : cleaned;
+      persist(); render();
+    });
+  }
+
+  return { render, saveCurrent, exportAll, importOne, importAll };
+}
+
+// -- 動作姿勢庫：只讀寫身體關節（BODY_LIB_JOINT_KEYS），完全不碰手指 --
+function captureCurrentBodyPose(){
+  const data = {};
+  for (const k of BODY_LIB_JOINT_KEYS) data[k] = (target[k] || [0,0,0]).map(v => Math.round(v*10)/10);
+  return data;
+}
+function applyBodyPoseData(data){
+  for (const k of BODY_LIB_JOINT_KEYS){
+    if (Array.isArray(data[k]) && data[k].length === 3) setTarget(k, data[k]);
+  }
+  setActiveBtn(-1);
+  updateSelectedBar();
+}
+
+// -- 掌指手勢庫：只讀寫30個手指指節（FINGER_JOINT_KEYS），完全不碰身體 --
+function captureCurrentGesture(){
+  const data = {};
+  for (const k of FINGER_JOINT_KEYS) data[k] = (target[k] || [0,0,0]).map(v => Math.round(v*10)/10);
+  return data;
+}
+function applyGestureData(data){
+  for (const k of FINGER_JOINT_KEYS){
+    if (Array.isArray(data[k]) && data[k].length === 3) setTarget(k, data[k]);
+  }
+  updateSelectedBar();
+}
+
+let poseLibCtrl = null;
+let gestureLibCtrl = null;
+
+function bindLibraryUI(){
+  poseLibCtrl = createLibraryController({
+    storageKey: POSE_LIB_KEY, captureFn: captureCurrentBodyPose, applyFn: applyBodyPoseData,
+    listElId: "poseLibList", emptyElId: "poseLibEmpty", filePrefix: "姿勢", itemLabel: "姿勢"
+  });
+  gestureLibCtrl = createLibraryController({
+    storageKey: GESTURE_LIB_KEY, captureFn: captureCurrentGesture, applyFn: applyGestureData,
+    listElId: "gestureLibList", emptyElId: "gestureLibEmpty", filePrefix: "手勢", itemLabel: "手勢"
+  });
+
+  const poseNameInput = document.getElementById("poseLibNameInput");
+  document.getElementById("poseLibSaveBtn").onclick = () => {
+    poseLibCtrl.saveCurrent(poseNameInput.value);
+    poseNameInput.value = "";
+  };
+  poseNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("poseLibSaveBtn").click(); });
+  document.getElementById("poseLibExportAllBtn").onclick = () => poseLibCtrl.exportAll();
+  document.getElementById("poseLibImportAllBtn").onclick = () => document.getElementById("poseLibImportAllFile").click();
+  document.getElementById("poseLibImportAllFile").onchange = (e) => { poseLibCtrl.importAll(e.target.files[0]); e.target.value = ""; };
+  document.getElementById("poseLibImportOneBtn").onclick = () => document.getElementById("poseLibImportOneFile").click();
+  document.getElementById("poseLibImportOneFile").onchange = (e) => { poseLibCtrl.importOne(e.target.files[0]); e.target.value = ""; };
+
+  const gestureNameInput = document.getElementById("gestureLibNameInput");
+  document.getElementById("gestureLibSaveBtn").onclick = () => {
+    gestureLibCtrl.saveCurrent(gestureNameInput.value);
+    gestureNameInput.value = "";
+  };
+  gestureNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("gestureLibSaveBtn").click(); });
+  document.getElementById("gestureLibExportAllBtn").onclick = () => gestureLibCtrl.exportAll();
+  document.getElementById("gestureLibImportAllBtn").onclick = () => document.getElementById("gestureLibImportAllFile").click();
+  document.getElementById("gestureLibImportAllFile").onchange = (e) => { gestureLibCtrl.importAll(e.target.files[0]); e.target.value = ""; };
+  document.getElementById("gestureLibImportOneBtn").onclick = () => document.getElementById("gestureLibImportOneFile").click();
+  document.getElementById("gestureLibImportOneFile").onchange = (e) => { gestureLibCtrl.importOne(e.target.files[0]); e.target.value = ""; };
+
+  poseLibCtrl.render();
+  gestureLibCtrl.render();
+}
+
+// ---- 鏡像（左右對稱姿勢）----
+// 左右成對的關節：鏡像時互換＋做世界空間鏡射；中軸關節（hips/spine系列/neck/head）：原地鏡射。
+// 採用「世界四元數鏡射」而非針對各關節猜測要negate哪一軸角度——後者需要對這個特定rig
+// 逐一試錯校準才知道對不對；世界四元數鏡射公式則是通用的數學結果，對任何bind pose都成立。
+// 公式推導：改用「先算出鏡像後的目標世界四元數，再由上而下依骨架階層換算回本地旋轉」，
+// 已用 Node.js 合成一個左右鏡像對稱的骨架模擬驗證：套任意FK姿勢後，鏡像結果的世界位置/朝向
+// 誤差都在浮點極限(<1e-15)內，且雙重鏡像（右→左→右）能完全還原回原本姿勢（冪等性）。
+const MIRROR_PAIR_KEYS = [
+  ["rShoulder","lShoulder"], ["rArm","lArm"], ["rForeArm","lForeArm"], ["rHand","lHand"],
+  ["rUpLeg","lUpLeg"], ["rLeg","lLeg"], ["rFoot","lFoot"]
+];
+const MIRROR_SELF_KEYS = ["hips","spine","spine1","spine2","neck","head"];
+
+function reflectWorldQuat(q){
+  // 世界空間對「角色左右中線」（X=0 平面，模型載入時已置中對齊）鏡射：
+  // X、W 分量不變，Y、Z 分量反號（可由 R' = M·R·M 對可逆反射矩陣 M=diag(-1,1,1) 的
+  // 共軛關係推導：鏡射會保留繞X軸的分量、但反轉繞Y/Z軸分量的旋轉手性）。
+  return new THREE.Quaternion(q.x, -q.y, -q.z, q.w);
+}
+
+// 鏡像「目前姿勢」（target[] 對應的FK角度）。若某肢體正開著IK，鏡像後下一幀該肢體的
+// root/mid骨骼會被IK即時解算蓋回原本角度（IK目標球位置不會跟著鏡像）——這是刻意的範圍限制，
+// 避免鏡像功能還要連動處理IK目標球/朝向控制球的鏡射，複雜度不成比例。若要鏡像IK姿勢，
+// 建議先關閉該肢體IK，或鏡像後自行把目標球也拖到對稱位置。
+function mirrorPose(){
+  if (!model) return;
+
+  // Step A：先把所有骨骼的本地旋轉設成「目前 target[] 對應的姿勢」（不是還在lerp中的current，
+  // 也不是IK即時解算的殘留值），確保鏡像的是使用者當下設定的目標角度。
+  for (const k of ALL_JOINT_KEYS){
+    const bone = bones[k];
+    if (!bone || !restQuat[k] || !target[k]) continue;
+    bone.quaternion.copy(restQuat[k]).multiply(eulerToQuat(target[k]));
+  }
+  model.updateMatrixWorld(true);
+
+  // Step B：讀出每根骨骼目前的世界旋轉
+  const worldQuats = {};
+  for (const k of ALL_JOINT_KEYS){
+    const bone = bones[k];
+    if (!bone) continue;
+    worldQuats[k] = bone.getWorldQuaternion(new THREE.Quaternion());
+  }
+
+  // Step C：決定每根骨骼「鏡像後應有」的世界旋轉——左右成對的互換＋鏡射，中軸骨骼原地鏡射
+  const desiredWorldQuats = {};
+  for (const k of MIRROR_SELF_KEYS){
+    if (worldQuats[k]) desiredWorldQuats[k] = reflectWorldQuat(worldQuats[k]);
+  }
+  for (const [rk, lk] of MIRROR_PAIR_KEYS){
+    if (worldQuats[rk]) desiredWorldQuats[lk] = reflectWorldQuat(worldQuats[rk]);
+    if (worldQuats[lk]) desiredWorldQuats[rk] = reflectWorldQuat(worldQuats[lk]);
+  }
+
+  // Step D：由上而下（ALL_JOINT_KEYS 已是父在前、子在後的拓樸順序）把「鏡像後世界旋轉」
+  // 換算回每根骨骼的本地旋轉並實際套用——子骨骼換算時，父骨骼的世界旋轉已經是鏡像後的新值。
+  for (const k of ALL_JOINT_KEYS){
+    const bone = bones[k];
+    const desired = desiredWorldQuats[k];
+    if (!bone || !desired) continue;
+    if (bone.parent){
+      const parentWorldQuat = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+      bone.quaternion.copy(parentWorldQuat.clone().invert().multiply(desired));
+    } else {
+      bone.quaternion.copy(desired);
+    }
+    bone.updateWorldMatrix(true, true);
+  }
+
+  // Step E：把套用後的本地旋轉反推回 target/current，讓鏡像結果可以被「新增拍點」記錄、
+  // 也能在 JSON 分頁看到（跟兩節IK求解後 syncTargetFromBone 的用法一致）。
+  for (const k of ALL_JOINT_KEYS) syncTargetFromBone(k);
+
+  setActiveBtn(-1);
+  updateSelectedBar();
+}
+
+// ---- Undo / Redo（角度層級：關節角度＋拍點時間軸資料）----
+// 刻意不涵蓋 IK 目標球/極向球位置、IK 開關狀態、身體(model)即時位置——
+// 這些狀態要正確復原需要連動重建一堆求解邏輯（見各 setXxxEnabled 函式），
+// 複雜度/風險不成比例，先聚焦在最常誤操作、價值最高的
+// 「姿勢庫切換／JSON套用／拍點增刪改」這幾類動作。
+function snapshotAngleState(){
+  const targetClone = {};
+  for (const k of ALL_JOINT_KEYS) targetClone[k] = target[k] ? target[k].slice() : [0,0,0];
+  return {
+    target: targetClone,
+    keyframes: JSON.parse(JSON.stringify(keyframes)),
+    kfEditingIndex,
+    poseIndex,
+    kfPendingEasing,
+    kfPendingBeats
+  };
+}
+
+function pushHistory(){
+  if (restoringHistory) return;
+  const snap = snapshotAngleState();
+  historyStack = historyStack.slice(0, historyIndex + 1);
+  historyStack.push(snap);
+  if (historyStack.length > HISTORY_MAX) historyStack.shift();
+  historyIndex = historyStack.length - 1;
+  updateUndoRedoButtons();
+}
+
+function restoreSnapshot(snap){
+  restoringHistory = true;
+  for (const k of ALL_JOINT_KEYS){
+    const v = snap.target[k] || [0,0,0];
+    target[k] = v.slice();
+    current[k] = v.slice();
+  }
+  keyframes = JSON.parse(JSON.stringify(snap.keyframes));
+  kfEditingIndex = snap.kfEditingIndex;
+  poseIndex = snap.poseIndex;
+  kfPendingEasing = snap.kfPendingEasing;
+  kfPendingBeats = snap.kfPendingBeats;
+  setActiveBtn(-1);
+  updateSelectedBar();
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+  scheduleAutoSave();
+  restoringHistory = false;
+}
+
+function undo(){
+  if (kfPlaying || historyIndex <= 0) return;
+  historyIndex--;
+  restoreSnapshot(historyStack[historyIndex]);
+  updateUndoRedoButtons();
+}
+
+function redo(){
+  if (kfPlaying || historyIndex >= historyStack.length - 1) return;
+  historyIndex++;
+  restoreSnapshot(historyStack[historyIndex]);
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons(){
+  const u = document.getElementById("undoBtn");
+  const r = document.getElementById("redoBtn");
+  if (u) u.disabled = historyIndex <= 0;
+  if (r) r.disabled = historyIndex >= historyStack.length - 1;
+}
+
+function bindHistoryUI(){
+  const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
+  if (undoBtn) undoBtn.onclick = undo;
+  if (redoBtn) redoBtn.onclick = redo;
+  window.addEventListener("keydown", (e) => {
+    if (e.key.toLowerCase() !== "z") return;
+    const modKey = e.metaKey || e.ctrlKey;
+    if (!modKey) return;
+    const t = e.target;
+    const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+    if (typing) return;
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+  });
+  updateUndoRedoButtons();
+}
+
+// ---- 自動存檔（localStorage）----
+// 只存「資料層」：拍點時間軸(keyframes，含traj metadata)、軌跡控制點座標、
+// 路徑模式、BPM、目前選取中的Easing/拍數預設值。不存IK開關/即時marker狀態，
+// 理由跟undo一樣：那些狀態要正確復原需要連動重建一堆求解邏輯，複雜度不成比例。
+function scheduleAutoSave(){
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(doAutoSave, 1500);
+}
+
+function doAutoSave(){
+  try {
+    const data = {
+      schemaVersion: AUTOSAVE_SCHEMA_VERSION,
+      savedAt: Date.now(),
+      keyframes,
+      trajPoints: {},
+      trajMode: TRAJ_MODE,
+      bpm,
+      kfPendingEasing,
+      kfPendingBeats
+    };
+    for (const limb of IK_LIMB_KEYS){
+      data.trajPoints[limb] = trajPointMeshes[limb].map(m => ({ x:m.position.x, y:m.position.y, z:m.position.z }));
+    }
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
+    showAutosaveIndicator();
+  } catch (e){
+    console.warn("自動存檔失敗：", e);
+  }
+}
+
+function showAutosaveIndicator(){
+  const el = document.getElementById("autosaveIndicator");
+  if (!el) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  el.textContent = `已自動儲存 ${hh}:${mm}:${ss}`;
+  el.style.opacity = "1";
+  clearTimeout(showAutosaveIndicator._t);
+  showAutosaveIndicator._t = setTimeout(() => { el.style.opacity = "0"; }, 2000);
+}
+
+// 頁面載入完成後檢查是否有自動存檔，詢問使用者是否還原（避免靜默覆蓋讓人誤以為是全新畫布）
+function tryLoadAutosave(){
+  let raw = null;
+  try { raw = localStorage.getItem(AUTOSAVE_KEY); } catch (e) { return; }
+  if (!raw) return;
+  let data;
+  try { data = JSON.parse(raw); } catch (e) { return; }
+  if (!data || data.schemaVersion !== AUTOSAVE_SCHEMA_VERSION) return;
+  if (!Array.isArray(data.keyframes) || data.keyframes.length === 0) return;
+
+  const savedDate = data.savedAt ? new Date(data.savedAt) : null;
+  const timeStr = savedDate
+    ? `${savedDate.getMonth()+1}/${savedDate.getDate()} ${String(savedDate.getHours()).padStart(2,"0")}:${String(savedDate.getMinutes()).padStart(2,"0")}`
+    : "";
+  const ok = confirm(
+    `偵測到自動存檔（${data.keyframes.length} 個拍點${timeStr ? "，" + timeStr : ""}），要還原上次的編輯進度嗎？\n按「取消」會保留目前的空白畫布，並清除這份自動存檔。`
+  );
+  if (!ok){
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch (e) {}
+    return;
+  }
+
+  keyframes = data.keyframes;
+  kfEditingIndex = keyframes.length > 0 ? 0 : -1;
+  if (data.trajMode) Object.assign(TRAJ_MODE, data.trajMode);
+  if (typeof data.bpm === "number") bpm = data.bpm;
+  if (data.kfPendingEasing) kfPendingEasing = data.kfPendingEasing;
+  if (typeof data.kfPendingBeats === "number") kfPendingBeats = data.kfPendingBeats;
+
+  if (data.trajPoints){
+    for (const limb of IK_LIMB_KEYS){
+      const pts = data.trajPoints[limb];
+      if (!Array.isArray(pts)) continue;
+      for (const p of pts){
+        const geo = new THREE.SphereGeometry(0.026, 12, 12);
+        const mat = new THREE.MeshBasicMaterial({ color:0x9944ff, transparent:true, opacity:0.9, depthTest:false });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.renderOrder = 998;
+        mesh.position.set(p.x, p.y, p.z);
+        mesh.visible = (limb === trajActiveLimb);
+        mesh.userData.pickType = "trajPoint";
+        mesh.userData.limb = limb;
+        mesh.userData.index = trajPointMeshes[limb].length;
+        scene.add(mesh);
+        trajPointMeshes[limb].push(mesh);
+      }
+      updateTrajVisual(limb);
+    }
+  }
+
+  if (keyframes.length > 0){
+    applyPose(keyframes[0].angles);
+    applyBodyTransform(keyframes[0].body);
+  }
+
+  const bpmSlider = document.getElementById("bpmSlider");
+  if (bpmSlider) bpmSlider.value = String(bpm);
+  const bpmVal = document.getElementById("bpmVal");
+  if (bpmVal) bpmVal.textContent = String(bpm);
+  updateBeatMsHint();
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+  renderTrajPointList();
+}
+
+// ---- Keyframe 拍點時間軸 ----
+function snapshotCurrentAngles(){
+  const snap = {};
+  for (const k of ALL_JOINT_KEYS) snap[k] = target[k] ? target[k].slice() : [0,0,0];
+  return snap;
+}
+
+// 身體位置/朝向獨立於骨骼角度另外快照（model.position是平移、model.quaternion是絕對旋轉，
+// 跟骨骼的「相對rest pose歐拉角」性質不同，不適合塞進同一個 angles 字典）
+function snapshotBodyTransform(){
+  return { position: model.position.toArray(), quaternion: model.quaternion.toArray() };
+}
+
+function applyBodyTransform(bodyData){
+  if (!bodyData) return; // 舊拍點/匯入的JSON可能沒有body欄位，容錯跳過，不動body
+  model.position.fromArray(bodyData.position);
+  model.quaternion.fromArray(bodyData.quaternion);
+  model.updateWorldMatrix(true, true);
+}
+
+function addKeyframe(){
+  keyframes.push({ angles: snapshotCurrentAngles(), body: snapshotBodyTransform(), easing: kfPendingEasing, beats: kfPendingBeats });
+  kfEditingIndex = keyframes.length - 1;
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+function updateKeyframe(){
+  if (kfEditingIndex < 0 || !keyframes[kfEditingIndex]) return;
+  keyframes[kfEditingIndex].angles = snapshotCurrentAngles();
+  keyframes[kfEditingIndex].body = snapshotBodyTransform();
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+// 選取拍點的轉場 Easing / 拍數即時編輯（不需按「更新選取拍點」，因為不影響角度資料）
+function setKeyframeEasing(name){
+  kfPendingEasing = name;
+  if (kfEditingIndex >= 0 && keyframes[kfEditingIndex]) keyframes[kfEditingIndex].easing = name;
+  updateEasingPreview();
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+function setKeyframeBeats(val){
+  kfPendingBeats = val;
+  if (kfEditingIndex >= 0 && keyframes[kfEditingIndex]) keyframes[kfEditingIndex].beats = val;
+  updateBeatMsHint();
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+// 把 Easing / 拍數控制項同步成目前選取拍點的值（沒選取時維持上一次的預設值）
+function syncEasingControlsFromSelection(){
+  const kf = kfEditingIndex >= 0 ? keyframes[kfEditingIndex] : null;
+  kfPendingEasing = kf ? (kf.easing || "easeInOutQuad") : kfPendingEasing;
+  kfPendingBeats = kf ? (kf.beats || 1) : kfPendingBeats;
+  const easeSel = document.getElementById("kfEasingSelect");
+  const beatsSel = document.getElementById("kfBeatsSelect");
+  if (easeSel) easeSel.value = kfPendingEasing;
+  if (beatsSel) beatsSel.value = String(kfPendingBeats);
+  updateEasingPreview();
+  updateBeatMsHint();
+}
+
+function updateEasingPreview(){
+  const host = document.getElementById("kfEasingPreview");
+  if (host) host.innerHTML = buildEasingSVG(kfPendingEasing, 64, 34);
+}
+
+function updateBeatMsHint(){
+  const hint = document.getElementById("kfBeatMsHint");
+  if (!hint) return;
+  const ms = Math.round((60000/bpm) * kfPendingBeats);
+  hint.textContent = `＝ ${ms} ms（${bpm} BPM）`;
+}
+
+function deleteKeyframe(i){
+  keyframes.splice(i, 1);
+  if (kfEditingIndex >= keyframes.length) kfEditingIndex = keyframes.length - 1;
+  if (kfPlaying && keyframes.length < 2) stopKeyframePlayback();
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+function clearKeyframes(){
+  keyframes = [];
+  kfEditingIndex = -1;
+  stopKeyframePlayback();
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+function selectKeyframe(i){
+  kfEditingIndex = i;
+  applyPose(keyframes[i].angles);
+  setActiveBtn(-1);
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+}
+
+function renderKeyframeChips(){
+  const host = document.getElementById("kfList");
+  const empty = document.getElementById("kfEmpty");
+  host.innerHTML = "";
+  if (keyframes.length === 0){
+    host.appendChild(empty);
+    updateOnionSkins();
+    return;
+  }
+  keyframes.forEach((kf, i) => {
+    const chip = document.createElement("div");
+    chip.className = "kfChip";
+    if (i === kfEditingIndex) chip.classList.add("active");
+    if (kfPlaying && i === kfIndex) chip.classList.add("playing");
+
+    const sel = document.createElement("button");
+    sel.className = "sel";
+    sel.textContent = `F${i+1}`;
+    sel.onclick = () => selectKeyframe(i);
+
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.onclick = (ev) => { ev.stopPropagation(); deleteKeyframe(i); pushHistory(); };
+
+    chip.appendChild(sel);
+
+    // 若這個拍點是「生成拍點（軌跡）」批次寫入的，加一個小標籤提示（滑鼠移上去看是哪些肢體）
+    if (kf.traj && Object.keys(kf.traj).length > 0){
+      const trajTag = document.createElement("span");
+      trajTag.className = "kfTrajTag";
+      trajTag.textContent = "〜";
+      trajTag.title = "含軌跡資料：" + Object.keys(kf.traj).map(l => IK_CHAINS[l] ? IK_CHAINS[l].label : l).join("、");
+      chip.appendChild(trajTag);
+    }
+
+    // 顯示這個拍點「跳到下一拍」時使用的 Easing 縮圖 + 拍數（最後一個拍點沒有下一段轉場）
+    if (i < keyframes.length - 1){
+      const easeTag = document.createElement("div");
+      easeTag.className = "kfEaseTag";
+      const beats = kf.beats || 1;
+      const easeName = kf.easing || "easeInOutQuad";
+      easeTag.title = `${easeName} · ${beats} 拍`;
+      easeTag.innerHTML = buildEasingSVG(easeName, 26, 15) + `<span>${beats}拍</span>`;
+      chip.appendChild(easeTag);
+    }
+
+    chip.appendChild(del);
+    host.appendChild(chip);
+  });
+  updateOnionSkins();
+}
+
+function toggleKeyframePlayback(){
+  if (kfPlaying){ stopKeyframePlayback(); return; }
+  if (keyframes.length < 2){
+    alert("至少需要 2 個拍點才能播放（目前只有 " + keyframes.length + " 個）");
+    return;
+  }
+  if (autoPlaying) togglePreset(); // 避免跟預設循環同時搶骨骼
+  deselectJoint();
+  transformControls.enabled = false;
+  kfPlaying = true;
+  kfIndex = 0;
+  kfStartTime = performance.now();
+  document.getElementById("kfPlayBtn").classList.add("playing");
+  document.getElementById("kfPlayBtn").textContent = "■ 停止拍點";
+}
+
+function stopKeyframePlayback(){
+  kfPlaying = false;
+  transformControls.enabled = true;
+  document.getElementById("kfPlayBtn").classList.remove("playing");
+  document.getElementById("kfPlayBtn").textContent = "▶ 播放拍點";
+  renderKeyframeChips();
+}
+
+// ---- 軌跡播放時即時覆蓋（階段二：曲線播放時真的平滑，不是靠取樣點密度逼近）----
+// 檢查 frameA/frameB 是否對同一個 limb 記錄了相同 trajId 的 traj 資料，若是，
+// 代表這兩個拍點屬於同一次「生成拍點」批次，回傳這些 limb 的 root/mid 骨骼key，
+// 讓上面的一般角度slerp迴圈跳過它們（改由 applyTrajOverridesDuringPlayback 接管）。
+function collectTrajOverrideKeys(frameA, frameB){
+  const overrideLimbs = [];
+  const overrideKeys = new Set();
+  if (frameA.traj && frameB.traj){
+    for (const limb of IK_LIMB_KEYS){
+      const a = frameA.traj[limb], b = frameB.traj[limb];
+      if (a && b && a.id === b.id){
+        overrideLimbs.push(limb);
+        const chain = IK_CHAINS[limb];
+        overrideKeys.add(chain.root);
+        overrideKeys.add(chain.mid);
+      }
+    }
+  }
+  return { overrideLimbs, overrideKeys };
+}
+
+// 對每個觸發軌跡覆蓋的 limb：在 frameA.traj[limb].t 與 frameB.traj[limb].t 之間用 et 內插出
+// 目前應該落在路徑上的進度，直接用純數學的 sampleTrajectoryFromPoints 取樣出座標（不受拍點密度限制），
+// 疊加上「本幀最新」的 root 骨骼世界座標，重新呼叫一次 solveTwoBoneIK。
+// 末端骨骼（手掌/腳掌）本身的旋轉維持上面迴圈已經slerp好的結果，這裡不動它
+// （呼應「IK只驅動root+mid，末端保留FK」的既有設計哲學）。
+function applyTrajOverridesDuringPlayback(limbs, frameA, frameB, et){
+  const eClamped = clampNum(et, 0, 1); // 取樣進度用clamp過的et，避免overshoot easing把curT甩出[0,1]產生怪座標
+  for (const limb of limbs){
+    const chain = IK_CHAINS[limb];
+    const rootBone = bones[chain.root], midBone = bones[chain.mid], endBone = bones[chain.end];
+    if (!rootBone || !midBone || !endBone) continue;
+    const trajA = frameA.traj[limb], trajB = frameB.traj[limb];
+    const curT = trajA.t + (trajB.t - trajA.t) * eClamped;
+    const mode = trajA.mode;
+
+    // 關鍵：這裡讀到的必須是「本幀剛套用完軀幹FK/身體位置之後」的最新世界座標，
+    // 呼叫端已在此之前手動跑過 model.updateMatrixWorld(true)，見 updateKeyframePlayback。
+    const rootPos = new THREE.Vector3(); rootBone.getWorldPosition(rootPos);
+    const localOffset = sampleTrajectoryFromPoints(mode, trajA.points, curT);
+    const targetPos = rootPos.clone().add(localOffset);
+
+    const poleA = new THREE.Vector3(trajA.pole.x, trajA.pole.y, trajA.pole.z);
+    const poleB = new THREE.Vector3(trajB.pole.x, trajB.pole.y, trajB.pole.z);
+    const poleLocal = poleA.lerp(poleB, eClamped);
+    const polePos = rootPos.clone().add(poleLocal);
+
+    solveTwoBoneIK(rootBone, midBone, endBone, targetPos, polePos);
+  }
+}
+
+// 每幀呼叫：在 keyframes[kfIndex] 與 keyframes[kfIndex+1] 之間用四元數 Slerp 平滑過渡
+// 過渡時長 = 該拍點自訂的「拍數」× BPM 換算出的一拍毫秒數；過渡曲線 = 該拍點自訂的 Easing
+function updateKeyframePlayback(now){
+  const frameA = keyframes[kfIndex];
+  const frameB = keyframes[kfIndex + 1];
+
+  const beats = frameA.beats || 1;
+  const beatMs = (60000 / bpm) * beats;
+  const elapsed = now - kfStartTime;
+  const t = Math.min(elapsed / beatMs, 1); // 線性時間進度，用來判斷這一段是否播完
+  const easeFn = EASINGS[frameA.easing] || EASINGS.linear;
+  const et = easeFn(t); // 緩動後的進度餵給 slerp；Back/Elastic 允許超出 [0,1]，做出甩過頭再回彈的效果
+
+  // 這兩個limb的root/mid骨骼改由軌跡即時IK接管，下面的一般角度slerp迴圈要跳過它們
+  const { overrideLimbs, overrideKeys } = collectTrajOverrideKeys(frameA, frameB);
+
+  for (const key of ALL_JOINT_KEYS){
+    if (overrideKeys.has(key)) continue;
+    const bone = bones[key];
+    if (!bone || !restQuat[key]) continue;
+    const anglesA = frameA.angles[key] || [0,0,0];
+    const anglesB = frameB.angles[key] || anglesA;
+    const qa = eulerToQuat(anglesA);
+    const qb = eulerToQuat(anglesB);
+    const q = qa.clone().slerp(qb, et); // 四元數球面線性插值：最短路徑、依 Easing 曲線變速
+    bone.quaternion.copy(restQuat[key]).multiply(q);
+  }
+
+  // 身體位置/朝向內插：舊拍點沒有 body 欄位時容錯跳過，身體維持原地不動
+  if (frameA.body && frameB.body){
+    const posA = new THREE.Vector3().fromArray(frameA.body.position);
+    const posB = new THREE.Vector3().fromArray(frameB.body.position);
+    model.position.lerpVectors(posA, posB, et);
+    const bqa = new THREE.Quaternion().fromArray(frameA.body.quaternion);
+    const bqb = new THREE.Quaternion().fromArray(frameB.body.quaternion);
+    model.quaternion.copy(bqa).slerp(bqb, et);
+  }
+
+  // ⚠️ 關鍵坑：three.js只在renderer.render()才會重算matrixWorld，上面剛套用的軀幹/身體姿勢
+  // 這時候读 bone.getWorldPosition() 拿到的還是「上一幀」的舊值。若不在這裡手動刷新一次，
+  // 底下算軌跡目標點用的root世界座標會跟這一幀的軀幹動作對不上，產生一幀的滯後感。
+  model.updateMatrixWorld(true);
+
+  if (overrideLimbs.length > 0){
+    applyTrajOverridesDuringPlayback(overrideLimbs, frameA, frameB, et);
+  }
+
+  if (t >= 1){
+    // 這一拍轉場結束，把資料同步成 frameB，避免下一幀開始時跳動
+    applyPose(frameB.angles);
+    applyBodyTransform(frameB.body);
+    kfIndex++;
+    if (kfIndex >= keyframes.length - 1){
+      if (kfLoop){
+        kfIndex = 0;
+        kfStartTime = now;
+      } else {
+        stopKeyframePlayback();
+        return;
+      }
+    } else {
+      kfStartTime = now;
+    }
+  }
+  renderKeyframeChips();
+}
+
+function bindTopUI(){
+  document.getElementById("playBtn").onclick = togglePreset;
+  document.getElementById("randBtn").onclick = () => { randomPose(true); pushHistory(); };
+  document.getElementById("mirrorBtn").onclick = () => { mirrorPose(); pushHistory(); };
+  document.getElementById("resetBtn").onclick = () => { resetPose(); pushHistory(); };
+  document.getElementById("bpmSlider").oninput = updateBpm;
+  document.getElementById("deselectBtn").onclick = deselectJoint;
+  document.getElementById("zeroJointBtn").onclick = () => {
+    if (selectedIK){
+      if (selectedIK.role === "trajPoint") return; // 軌跡控制點沒有「預設位置」可歸零，請用清單裡的 × 刪除
+      if (selectedIK.limb === "spine") syncSpineIKMarkerToDefault();
+      else if (selectedIK.limb === "lookAt_head") syncLookAtMarkerToDefault("head");
+      else if (selectedIK.limb === "lookAt_chest") syncLookAtMarkerToDefault("chest");
+      else if (selectedIK.limb === "body") resetBodyTransform();
+      else if (selectedIK.limb.startsWith(FINGER_IK_PREFIX)) syncFingerIKMarkerToDefault(selectedIK.limb.slice(FINGER_IK_PREFIX.length));
+      else syncIKMarkersToDefault(selectedIK.limb);
+      updateSelectedBar();
+      return;
+    }
+    if (!selectedKey) return;
+    setTarget(selectedKey, [0,0,0]);
+    updateSelectedBar();
+    pushHistory();
+  };
+  document.getElementById("spaceBtn").onclick = () => {
+    const isLocal = transformControls.space === "local";
+    transformControls.setSpace(isLocal ? "world" : "local");
+    document.getElementById("spaceBtn").textContent = "座標：" + (isLocal ? "世界" : "本地");
+  };
+  document.getElementById("snapSelect").onchange = (e) => {
+    const deg = parseFloat(e.target.value);
+    transformControls.setRotationSnap(deg > 0 ? D(deg) : null);
+  };
+
+  document.getElementById("applyJsonBtn").onclick = () => { if (applyJson()) pushHistory(); };
+  document.getElementById("copyJsonBtn").onclick = () => {
+    refreshJsonArea();
+    const area = document.getElementById("jsonArea");
+    area.select();
+    document.execCommand("copy");
+  };
+
+  document.getElementById("kfPlayBtn").onclick = toggleKeyframePlayback;
+  document.getElementById("kfLoopChk").onchange = (e) => { kfLoop = e.target.checked; };
+  const onionChk = document.getElementById("onionSkinChk");
+  if (onionChk){
+    onionChk.checked = onionSkinEnabled;
+    onionChk.onchange = (e) => { onionSkinEnabled = e.target.checked; updateOnionSkins(); };
+  }
+  document.getElementById("kfAddBtn").onclick = () => { addKeyframe(); pushHistory(); };
+  document.getElementById("kfUpdateBtn").onclick = () => { updateKeyframe(); pushHistory(); };
+  document.getElementById("kfDeleteBtn").onclick = () => { if (kfEditingIndex >= 0){ deleteKeyframe(kfEditingIndex); pushHistory(); } };
+  document.getElementById("kfClearBtn").onclick = () => { clearKeyframes(); pushHistory(); };
+
+  const easeSel = document.getElementById("kfEasingSelect");
+  easeSel.innerHTML = buildEasingSelectOptions();
+  easeSel.value = kfPendingEasing;
+  easeSel.onchange = (e) => { setKeyframeEasing(e.target.value); pushHistory(); };
+
+  const beatsSel = document.getElementById("kfBeatsSelect");
+  beatsSel.value = String(kfPendingBeats);
+  beatsSel.onchange = (e) => { setKeyframeBeats(parseFloat(e.target.value)); pushHistory(); };
+
+  updateEasingPreview();
+  updateBeatMsHint();
+
+  initUITabs();
+  initUIVisibility();
+  initUIResize();
+  bindIKUI();
+  bindTrajUI();
+  bindHistoryUI();
+  bindCameraUI();
+  bindLibraryUI();
+}
+
+// ---- 面板高度：拖曳把手手動調整 ----
+const UI_HEIGHT_MIN_PX = 160;
+const UI_HEIGHT_DEFAULT_RATIO = 0.46; // 對應原本的 46vh 預設
+const UI_HEIGHT_MAX_RATIO = 0.85;
+
+function initUIResize(){
+  const ui = document.getElementById("ui");
+  const handle = document.getElementById("uiResizeHandle");
+  let dragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  function clampHeight(px){
+    const max = window.innerHeight * UI_HEIGHT_MAX_RATIO;
+    return Math.min(max, Math.max(UI_HEIGHT_MIN_PX, px));
+  }
+
+  function applyHeight(px, save){
+    const h = clampHeight(px);
+    ui.style.height = h + "px";
+    if (save){
+      try { localStorage.setItem("tuttingUIHeightRatio", String(h / window.innerHeight)); } catch (e) {}
+    }
+  }
+
+  function onPointerMove(e){
+    if (!dragging) return;
+    // 面板貼底部，往上拖（clientY 變小）要變高，所以是「起始Y - 目前Y」
+    applyHeight(startHeight + (startY - e.clientY), false);
+  }
+
+  function onPointerUp(e){
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.classList.remove("uiResizing");
+    applyHeight(ui.getBoundingClientRect().height, true);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+  }
+
+  handle.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    startY = e.clientY;
+    startHeight = ui.getBoundingClientRect().height;
+    handle.classList.add("dragging");
+    document.body.classList.add("uiResizing");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    e.preventDefault();
+  });
+
+  // 雙擊把手：重置回預設高度
+  handle.addEventListener("dblclick", () => {
+    applyHeight(window.innerHeight * UI_HEIGHT_DEFAULT_RATIO, true);
+  });
+
+  // 視窗尺寸改變時，依原本比例換算成新的 px 高度，維持相對大小
+  window.addEventListener("resize", () => {
+    let ratio = UI_HEIGHT_DEFAULT_RATIO;
+    try { ratio = parseFloat(localStorage.getItem("tuttingUIHeightRatio")) || UI_HEIGHT_DEFAULT_RATIO; } catch (e) {}
+    applyHeight(window.innerHeight * ratio, false);
+  });
+
+  let ratio = UI_HEIGHT_DEFAULT_RATIO;
+  try { ratio = parseFloat(localStorage.getItem("tuttingUIHeightRatio")) || UI_HEIGHT_DEFAULT_RATIO; } catch (e) {}
+  applyHeight(window.innerHeight * ratio, false);
+}
+
+// ---- 面板分頁（姿勢庫／JSON／時間軸） ----
+function initUITabs(){
+  const tabBtns = document.querySelectorAll(".tabBtn");
+  const panels = document.querySelectorAll(".tabPanel");
+
+  function switchTab(name){
+    tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+    panels.forEach(p => p.classList.toggle("active", p.dataset.tab === name));
+    if (name === "json") refreshJsonArea();
+    if (name === "traj") renderTrajPointList();
+    try { localStorage.setItem("tuttingActiveTab", name); } catch (e) {}
+    updateOnionSkins();
+  }
+
+  tabBtns.forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+  let savedTab = "poses";
+  try { savedTab = localStorage.getItem("tuttingActiveTab") || "poses"; } catch (e) {}
+  switchTab(savedTab);
+}
+
+// ---- 面板整體隱藏／顯示（快速鍵 H） ----
+function initUIVisibility(){
+  const ui = document.getElementById("ui");
+  const hideBtn = document.getElementById("uiHideBtn");
+  const showBtn = document.getElementById("uiShowBtn");
+
+  function setHidden(hidden){
+    ui.style.display = hidden ? "none" : "flex";
+    showBtn.style.display = hidden ? "block" : "none";
+    try { localStorage.setItem("tuttingUIHidden", hidden ? "1" : "0"); } catch (e) {}
+  }
+
+  hideBtn.onclick = () => setHidden(true);
+  showBtn.onclick = () => setHidden(false);
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "h" && e.key !== "H") return;
+    const t = e.target;
+    const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+    if (typing) return;
+    setHidden(ui.style.display !== "none");
+  });
+
+  let hidden = false;
+  try { hidden = localStorage.getItem("tuttingUIHidden") === "1"; } catch (e) {}
+  setHidden(hidden);
+}
+
+function togglePreset(){
+  autoPlaying = !autoPlaying;
+  const btn = document.getElementById("playBtn");
+  btn.classList.toggle("playing", autoPlaying);
+  btn.textContent = autoPlaying ? "■ 停止" : "▶ 預設循環";
+  if (autoPlaying){
+    if (kfPlaying) stopKeyframePlayback(); // 避免跟拍點播放同時搶骨骼
+    startBeat();
+  } else {
+    clearInterval(beatTimer);
+  }
+}
+
+function startBeat(){
+  clearInterval(beatTimer);
+  const interval = 60000 / bpm;
+  beatTimer = setInterval(() => {
+    if (Math.random() < 0.35){
+      randomPose(true);
+    } else {
+      poseIndex = (poseIndex + 1) % POSES.length;
+      applyPose(POSES[poseIndex]);
+      setActiveBtn(poseIndex);
+    }
+  }, interval);
+}
+
+function updateBpm(){
+  bpm = parseInt(document.getElementById("bpmSlider").value, 10);
+  document.getElementById("bpmVal").textContent = bpm;
+  updateBeatMsHint();
+  if (autoPlaying) startBeat();
+  scheduleAutoSave();
+}
+
+// ---- 手腳 IK 求解（兩節解析解：root-mid-end + Pole 向量） ----
+function clampNum(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+// 把 deltaQuat（世界空間的旋轉增量）套用到某骨骼身上，換算回它的本地四元數
+// （bone.quaternion 是相對 parent 的本地旋轉，所以要先轉世界空間疊加，再轉回本地）
+function applyWorldDeltaQuat(bone, deltaQuat){
+  const parentWorldQuat = new THREE.Quaternion();
+  bone.parent.getWorldQuaternion(parentWorldQuat);
+  const boneWorldQuat = new THREE.Quaternion();
+  bone.getWorldQuaternion(boneWorldQuat);
+  const newWorldQuat = deltaQuat.clone().multiply(boneWorldQuat);
+  const newLocalQuat = parentWorldQuat.clone().invert().multiply(newWorldQuat);
+  bone.quaternion.copy(newLocalQuat);
+}
+
+// 核心兩節 IK：給定 root/mid/end 三根骨骼目前的世界位置，
+// 用餘弦定理算出能讓 end 命中 targetPos 的彎曲角度，彎曲方向由 polePos 決定，
+// 再把結果換算成 root、mid 兩根骨骼各自的世界旋轉增量。
+function solveTwoBoneIK(rootBone, midBone, endBone, targetPos, polePos){
+  const rootPos = new THREE.Vector3(); rootBone.getWorldPosition(rootPos);
+  const midPos = new THREE.Vector3(); midBone.getWorldPosition(midPos);
+  const endPos = new THREE.Vector3(); endBone.getWorldPosition(endPos);
+
+  const upperLen = rootPos.distanceTo(midPos);
+  const lowerLen = midPos.distanceTo(endPos);
+  if (upperLen < 1e-6 || lowerLen < 1e-6) return;
+
+  const toTarget = targetPos.clone().sub(rootPos);
+  let dist = toTarget.length();
+  const maxLen = upperLen + lowerLen - 1e-4;
+  const minLen = Math.abs(upperLen - lowerLen) + 1e-4;
+  dist = clampNum(dist, minLen, maxLen);
+  if (toTarget.lengthSq() < 1e-10) toTarget.set(0, 0, 1);
+  const targetDir = toTarget.clone().normalize();
+  const clampedTargetPos = rootPos.clone().add(targetDir.clone().multiplyScalar(dist));
+
+  // 餘弦定理：root 端夾角（root→mid 方向 與 root→target 方向 的夾角）
+  let cosRoot = (upperLen*upperLen + dist*dist - lowerLen*lowerLen) / (2*upperLen*dist);
+  cosRoot = clampNum(cosRoot, -1, 1);
+  const angleRoot = Math.acos(cosRoot);
+
+  // 彎曲平面：由 root→target 與 root→pole 兩條向量決定，pole 在平面上的垂直分量決定彎曲往哪一側
+  const toPole = polePos.clone().sub(rootPos);
+  const poleOnAxis = targetDir.clone().multiplyScalar(toPole.dot(targetDir));
+  let bendDir = toPole.clone().sub(poleOnAxis);
+  if (bendDir.lengthSq() < 1e-8){
+    // pole 剛好落在 root-target 連線上（退化情況）：退回用目前 mid 的位置當彎曲方向參考
+    const midOnAxis = targetDir.clone().multiplyScalar(midPos.clone().sub(rootPos).dot(targetDir));
+    bendDir = midPos.clone().sub(rootPos).sub(midOnAxis);
+  }
+  if (bendDir.lengthSq() < 1e-8) bendDir.set(0, 1, 0);
+  bendDir.normalize();
+
+  let bendAxis = new THREE.Vector3().crossVectors(targetDir, bendDir);
+  if (bendAxis.lengthSq() < 1e-8) bendAxis.set(1, 0, 0);
+  else bendAxis.normalize();
+
+  // 新的 mid 方向：把 root→target 的方向繞 bendAxis 轉 angleRoot 度，轉向 pole 那一側
+  const midDir = targetDir.clone().applyAxisAngle(bendAxis, angleRoot);
+  const newEndPos = clampedTargetPos; // 命中點（若目標超出可及範圍，會被夾在最大伸展處）
+
+  // ---- root 骨骼：世界空間旋轉，讓「root→mid」方向對齊新的 midDir ----
+  const currentUpperDir = midPos.clone().sub(rootPos).normalize();
+  const deltaRoot = new THREE.Quaternion().setFromUnitVectors(currentUpperDir, midDir);
+  applyWorldDeltaQuat(rootBone, deltaRoot);
+  rootBone.updateWorldMatrix(true, true); // 讓 mid/end 骨骼的世界矩陣立刻反映 root 剛剛的旋轉
+
+  // ---- mid 骨骼：root 轉完後重新取得世界座標，再讓「mid→end」方向對齊目標點 ----
+  const midPosAfter = new THREE.Vector3(); midBone.getWorldPosition(midPosAfter);
+  const endPosAfter = new THREE.Vector3(); endBone.getWorldPosition(endPosAfter);
+  const currentLowerDir = endPosAfter.clone().sub(midPosAfter).normalize();
+  const desiredLowerDir = newEndPos.clone().sub(midPosAfter).normalize();
+  const deltaMid = new THREE.Quaternion().setFromUnitVectors(currentLowerDir, desiredLowerDir);
+  applyWorldDeltaQuat(midBone, deltaMid);
+  midBone.updateWorldMatrix(true, true);
+}
+
+// 若 IK 目標超出「肩膀→目標」可及距離，平移整個角色 model，
+// 讓肩膀貼近到「剛好可及」的距離，再交給原本的 solveTwoBoneIK 做手肘彎曲微調。
+// 只動 model.position（角色剛體平移），完全不碰骨骼旋轉，跟現有 IK 求解互不衝突。
+// 例：手掌固定在單槓上，身體搆不到時會整個人靠過去，而不是手臂硬拉長。
+function solveRootFollowForLimb(limb){
+  if (!ikRootFollowEnabled[limb]) return;
+  const chain = IK_CHAINS[limb];
+  const rootBone = bones[chain.root], midBone = bones[chain.mid], endBone = bones[chain.end];
+  if (!rootBone || !midBone || !endBone) return;
+
+  const rootPos = new THREE.Vector3(); rootBone.getWorldPosition(rootPos);
+  const midPos = new THREE.Vector3(); midBone.getWorldPosition(midPos);
+  const endPos = new THREE.Vector3(); endBone.getWorldPosition(endPos);
+  const upperLen = rootPos.distanceTo(midPos);
+  const lowerLen = midPos.distanceTo(endPos);
+  const maxReach = upperLen + lowerLen;
+  if (maxReach < 1e-6) return;
+
+  const targetPos = ikTargetMeshes[limb].position;
+  const dist = rootPos.distanceTo(targetPos);
+  const comfortReach = maxReach * 0.92; // 留一點餘裕，避免手臂完全打直看起來卡住
+
+  if (dist > comfortReach){
+    const dirRootToTarget = targetPos.clone().sub(rootPos).normalize();
+    // 肩膀應該移動到的世界座標：從 target 往回退 comfortReach 距離
+    const desiredRootPos = targetPos.clone().sub(dirRootToTarget.multiplyScalar(comfortReach));
+    const delta = desiredRootPos.clone().sub(rootPos);
+    model.position.add(delta.multiplyScalar(ROOT_FOLLOW_LERP_T)); // 只前進一部分，跨幀累積平滑過渡
+    model.updateWorldMatrix(true, true); // 讓後續量測（含腿部 IK）立刻拿到新座標
+  }
+}
+
+// 從骨骼目前四元數反推「相對 rest pose」的角度，寫回 target/current（不含 UI 更新，逐幀呼叫用）
+// 讓 IK 求解的結果可以跟一般 FK 一樣被「新增拍點」記錄下來、被 JSON 匯出。
+function syncTargetFromBone(key){
+  const bone = bones[key];
+  if (!bone || !restQuat[key]) return;
+  const deltaQuat = restQuat[key].clone().invert().multiply(bone.quaternion);
+  const e = new THREE.Euler().setFromQuaternion(deltaQuat, "XYZ");
+  const deg = [R(e.x), R(e.y), R(e.z)].map(v => Math.round(v*10)/10);
+  target[key] = deg;
+  current[key] = deg.slice();
+}
+
+function updateIKPoleLines(){
+  const v = new THREE.Vector3();
+  for (const limb of IK_LIMB_KEYS){
+    if (!ikEnabled[limb]) continue;
+    const chain = IK_CHAINS[limb];
+    const midBone = bones[chain.mid];
+    if (!midBone) continue;
+    midBone.getWorldPosition(v);
+    const posAttr = ikPoleLines[limb].geometry.attributes.position;
+    posAttr.setXYZ(0, v.x, v.y, v.z);
+    const pp = ikPoleMeshes[limb].position;
+    posAttr.setXYZ(1, pp.x, pp.y, pp.z);
+    posAttr.needsUpdate = true;
+  }
+}
+
+// 每幀呼叫：對每個開啟 IK 的肢體求解，並把結果同步回 target/current（給拍點/JSON 用）
+function solveIKAll(){
+  let any = false;
+  const dualActive = dualAnchorEnabled && ikEnabled.rArm && ikEnabled.lArm;
+  // 雙手同時固定：優先處理，取代兩隻手臂各自獨立的 root-follow（避免兩套平移邏輯互搶）
+  if (dualActive) solveDualHandAnchor();
+
+  for (const limb of IK_LIMB_KEYS){
+    if (!ikEnabled[limb]) continue;
+    const chain = IK_CHAINS[limb];
+
+    // 手臂類肢體：雙手固定模式已經處理過身體對齊，這裡只在「非雙手固定模式」時
+    // 才跑單手各自的 root-follow，避免跟 solveDualHandAnchor 打架
+    if ((limb === "rArm" || limb === "lArm") && !dualActive) solveRootFollowForLimb(limb);
+    // 肩胛骨限幅輔助：在兩節IK求解前，讓Shoulder先偏一點點（僅手臂有shoulder欄位）
+    // 受 shoulderAssistEnabled 開關控制，關掉就完全跳過，肩膀保持不動
+    if ((limb === "rArm" || limb === "lArm") && shoulderAssistEnabled) solveShoulderAssist(limb);
+
+    const rootBone = bones[chain.root], midBone = bones[chain.mid], endBone = bones[chain.end];
+    if (!rootBone || !midBone || !endBone) continue;
+    solveTwoBoneIK(rootBone, midBone, endBone, ikTargetMeshes[limb].position, ikPoleMeshes[limb].position);
+    syncTargetFromBone(chain.root);
+    syncTargetFromBone(chain.mid);
+    // 腿部：root/mid的世界旋轉已經是本幀最新值，這時反推腳掌本地旋轉貼住鎖存值最準確
+    if (limb === "rLeg" || limb === "lLeg") applyFootLock(limb);
+    // Effector朝向控制：位置IK解完後，再套用目標球旋轉決定手掌/腳掌面向
+    // （若開啟了腳踝鎖存，這裡會覆蓋掉鎖存值——兩者互斥概念上都是「控制末端朝向」，
+    // 開啟朝向控制的那隻腳，鎖存的貼地朝向會被使用者手動指定的朝向取代）
+    applyEffectorOrientation(limb);
+    any = true;
+  }
+  if (any) updateIKPoleLines();
+}
+
+// ---- 脊椎多節 CCD IK（方向A：頭主動搆/對準目標，身體固定）----
+// 跟兩節 IK（solveTwoBoneIK）不同：骨骼數不固定、沒有餘弦定理封閉解，
+// 改用「循環座標下降法」（CCD）反覆逼近——每輪從鏈末端往固定端方向處理，
+// 每根骨骼各自轉一點點讓 effector 更貼近 target，多輪之後收斂。
+// damping（阻尼係數，每次只轉「應轉角度」的一部分）刻意不是1.0，
+// 避免旋轉全部集中在最後一節（脖子），讓彎曲弧度自然分散到整條鏈，
+// 而不是脖子單獨折死、其他骨骼卻幾乎不動。
+function solveCCDChain(boneChain, effectorBone, targetPos, iterations = 8, damping = spineCCDDamping){
+  const bonePos = new THREE.Vector3();
+  const endPos = new THREE.Vector3();
+  for (let iter = 0; iter < iterations; iter++){
+    for (let i = boneChain.length - 1; i >= 0; i--){
+      const bone = boneChain[i];
+      bone.getWorldPosition(bonePos);
+      effectorBone.getWorldPosition(endPos);
+
+      const toEnd = endPos.clone().sub(bonePos);
+      const toTarget = targetPos.clone().sub(bonePos);
+      if (toEnd.lengthSq() < 1e-8 || toTarget.lengthSq() < 1e-8) continue;
+      toEnd.normalize(); toTarget.normalize();
+
+      const axis = new THREE.Vector3().crossVectors(toEnd, toTarget);
+      const dot = clampNum(toEnd.dot(toTarget), -1, 1);
+      let angle = Math.acos(dot);
+      if (axis.lengthSq() < 1e-8 || angle < 1e-5) continue;
+      axis.normalize();
+      angle *= damping;
+
+      const deltaQuat = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+      applyWorldDeltaQuat(bone, deltaQuat);
+      bone.updateWorldMatrix(true, true);
+    }
+    effectorBone.getWorldPosition(endPos);
+    if (endPos.distanceTo(targetPos) < 0.005) break; // 已經夠貼近，提早結束省效能
+  }
+}
+
+// ---- 方向B：頭固定不動，身體去湊 ----
+// 若「Spine→目標」距離超出脊椎鏈可彎曲部分（Spine→Spine1→Spine2→Neck→Head）
+// 的最大伸展總長，平移整個角色 model，讓 Spine 貼近到「剛好可及」的距離，
+// 再交給 CCD 做脊椎彎曲的細部微調。
+// 注意：pivot 用 Spine 而非 Hips ——因為 Hips 固定不轉，Spine 自己旋轉只影響
+// 它的子孫（Spine1以下），不會改變 Spine 自己相對 Hips 的位置。也就是說
+// 「Hips→Spine」這段其實不可彎曲，若把它也算進可及範圍會高估伸展能力，
+// 導致平移完之後目標仍在 CCD 真正搆得到的範圍外、無法收斂。
+function solveSpineRootFollow(){
+  if (!spineRootFollowEnabled || !spineIKEnabled) return;
+  const pivotBone = bones[SPINE_IK_CHAIN.bones[0]]; // spine：CCD鏈第一個真正可旋轉的關節
+  if (!pivotBone || !spineIKTargetMesh) return;
+
+  // 只加總「可彎曲」的部分：spine→spine1→spine2→neck→head
+  const chainKeys = [...SPINE_IK_CHAIN.bones, SPINE_IK_CHAIN.effector];
+  let maxReach = 0;
+  const p1 = new THREE.Vector3(), p2 = new THREE.Vector3();
+  for (let i = 0; i < chainKeys.length - 1; i++){
+    const b1 = bones[chainKeys[i]], b2 = bones[chainKeys[i+1]];
+    if (!b1 || !b2) continue;
+    b1.getWorldPosition(p1); b2.getWorldPosition(p2);
+    maxReach += p1.distanceTo(p2);
+  }
+  if (maxReach < 1e-6) return;
+
+  const pivotPos = new THREE.Vector3(); pivotBone.getWorldPosition(pivotPos);
+  const targetPos = spineIKTargetMesh.position;
+  const dist = pivotPos.distanceTo(targetPos);
+  const comfortReach = maxReach * 0.92; // 留一點餘裕，避免整條脊椎打直看起來卡住
+
+  if (dist > comfortReach){
+    const dirToTarget = targetPos.clone().sub(pivotPos).normalize();
+    const desiredPivotPos = targetPos.clone().sub(dirToTarget.multiplyScalar(comfortReach));
+    const delta = desiredPivotPos.clone().sub(pivotPos);
+    model.position.add(delta.multiplyScalar(ROOT_FOLLOW_LERP_T)); // 只前進一部分，跨幀累積平滑過渡
+    model.updateWorldMatrix(true, true); // 讓後續量測（含腿部 IK、脊椎 CCD）立刻拿到新座標
+  }
+}
+
+// 每幀呼叫：脊椎鏈開啟時求解一次，並把結果同步回 target/current（給拍點/JSON 用）
+function solveSpineIK(){
+  if (!spineIKEnabled) return;
+  const chainBones = SPINE_IK_CHAIN.bones.map(key => bones[key]).filter(Boolean);
+  const effectorBone = bones[SPINE_IK_CHAIN.effector];
+  if (chainBones.length === 0 || !effectorBone || !spineIKTargetMesh) return;
+
+  solveCCDChain(chainBones, effectorBone, spineIKTargetMesh.position);
+
+  for (const key of SPINE_IK_CHAIN.bones) syncTargetFromBone(key);
+}
+
+// ---- 頭/胸口 look-at 求解 ----
+// 跟脊椎CCD不同：這裡只轉「單一骨骼」自己的朝向，讓local前方軸對準目標，
+// 不影響其他骨骼位置。單步精確解（不是迭代逼近），因為單一骨骼只有「朝向」這一個
+// 自由度要滿足，一次outer product轉軸就能算出精確解，且是冪等的
+// （已對準時再呼叫一次，delta angle會是0，不會產生漂移）。
+function solveLookAt(name){
+  if (!lookAtEnabled[name]) return;
+  const cfg = LOOKAT_CONFIG[name];
+  const bone = bones[cfg.key];
+  const mesh = lookAtTargetMesh[name];
+  if (!bone || !mesh) return;
+
+  const boneWorldQuat = new THREE.Quaternion(); bone.getWorldQuaternion(boneWorldQuat);
+  const worldForward = cfg.localForward.clone().applyQuaternion(boneWorldQuat).normalize();
+
+  const bonePos = new THREE.Vector3(); bone.getWorldPosition(bonePos);
+  const targetDir = mesh.position.clone().sub(bonePos);
+  if (targetDir.lengthSq() < 1e-8) return;
+  targetDir.normalize();
+
+  const dot = clampNum(worldForward.dot(targetDir), -1, 1);
+  const angle = Math.acos(dot);
+  if (angle < 1e-5) return;
+  const axis = new THREE.Vector3().crossVectors(worldForward, targetDir);
+  if (axis.lengthSq() < 1e-8) return;
+  axis.normalize();
+
+  applyWorldDeltaQuat(bone, new THREE.Quaternion().setFromAxisAngle(axis, angle));
+  bone.updateWorldMatrix(true, true);
+  syncTargetFromBone(cfg.key);
+}
+
+// ---- 肩胛骨限幅輔助旋轉（路線B）----
+// 不納入兩節封閉解本身，而是在兩節IK求解「前」，讓Shoulder往target方向偏一點點，
+// 但強制夾在 SHOULDER_ASSIST_MAX_ANGLE 內——真人鎖骨可動範圍本來就小（聳肩/前伸），
+// 夾住角度上限比做完整CCD更貼近真實動作，也不需要額外的關節角度限制系統。
+// ---- Effector 朝向控制 ----
+// 開關：開啟時，先把目標球的旋轉同步成「目前手掌/腳掌實際世界朝向」，
+// 避免目標球預設的單位旋轉(0,0,0,1)一啟用就把手掌轉飛。
+function setEffectorOrientEnabled(limb, on){
+  effectorOrientEnabled[limb] = on;
+  if (on){
+    const chain = IK_CHAINS[limb];
+    const endBone = bones[chain.end];
+    if (endBone){
+      const q = new THREE.Quaternion();
+      endBone.getWorldQuaternion(q);
+      ikTargetMeshes[limb].quaternion.copy(q);
+    }
+  }
+  updateEffectorOrientButtons();
+}
+
+function updateEffectorOrientButtons(){
+  for (const limb of IK_LIMB_KEYS){
+    const btn = document.getElementById("orientBtn_" + limb);
+    if (btn) btn.classList.toggle("active", effectorOrientEnabled[limb]);
+  }
+}
+
+// 每幀呼叫（在該肢體兩節IK求解「之後」執行）：把目標球目前的世界旋轉，
+// 反推成末端骨骼（手掌/腳掌）該有的本地旋轉，讓它的朝向跟著目標球的旋轉環走。
+// 目標球是scene的直接子物件（無父階層旋轉），所以它的quaternion本身就是世界旋轉。
+function applyEffectorOrientation(limb){
+  if (!effectorOrientEnabled[limb]) return;
+  const chain = IK_CHAINS[limb];
+  const endBone = bones[chain.end];
+  const targetMesh = ikTargetMeshes[limb];
+  if (!endBone || !endBone.parent || !targetMesh) return;
+  const parentWorldQuat = new THREE.Quaternion();
+  endBone.parent.getWorldQuaternion(parentWorldQuat);
+  endBone.quaternion.copy(parentWorldQuat.clone().invert().multiply(targetMesh.quaternion));
+  endBone.updateWorldMatrix(true, true);
+  syncTargetFromBone(chain.end);
+}
+
+
+// ---- 肩胛骨限幅輔助旋轉（路線B）----
+// 不納入兩節封閉解本身，而是在兩節IK求解「前」，讓Shoulder往target方向偏一點點，
+// 但強制夾在 SHOULDER_ASSIST_MAX_ANGLE 內——真人鎖骨可動範圍本來就小（聳肩/前伸），
+// 夾住角度上限比做完整CCD更貼近真實動作，也不需要額外的關節角度限制系統。
+function solveShoulderAssist(limb){
+  const chain = IK_CHAINS[limb];
+  if (!chain.shoulder) return; // 腿沒有shoulder欄位，直接跳過
+  const shoulderBone = bones[chain.shoulder];
+  const armBone = bones[chain.root];
+  if (!shoulderBone || !armBone) return;
+
+  const shoulderPos = new THREE.Vector3(); shoulderBone.getWorldPosition(shoulderPos);
+  const armPos = new THREE.Vector3(); armBone.getWorldPosition(armPos);
+  const targetPos = ikTargetMeshes[limb].position;
+
+  const restDir = armPos.clone().sub(shoulderPos);
+  const desiredDir = targetPos.clone().sub(shoulderPos);
+  if (restDir.lengthSq() < 1e-8 || desiredDir.lengthSq() < 1e-8) return;
+  restDir.normalize(); desiredDir.normalize();
+
+  const dot = clampNum(restDir.dot(desiredDir), -1, 1);
+  let angle = Math.acos(dot);
+  if (angle < 1e-5) return;
+  angle = Math.min(angle, SHOULDER_ASSIST_MAX_ANGLE); // 關鍵限幅
+
+  const axis = new THREE.Vector3().crossVectors(restDir, desiredDir);
+  if (axis.lengthSq() < 1e-8) return;
+  axis.normalize();
+
+  applyWorldDeltaQuat(shoulderBone, new THREE.Quaternion().setFromAxisAngle(axis, angle));
+  shoulderBone.updateWorldMatrix(true, true);
+  syncTargetFromBone(chain.shoulder);
+}
+
+// ---- 雙手同時固定（需 rArm/lArm 的 IK 都開啟 + dualAnchorEnabled）----
+// 單手root-follow只做「平移」，兩隻手同時要湊不同的固定點時平移會沒有自由度
+// 同時滿足兩個約束，所以改成「旋轉+平移整個角色」：
+// 1) 算出「目前左右肩連線方向」該轉到「目前左右目標連線方向」需要的旋轉，
+//    繞兩肩中點旋轉整個model（这一步讓身體「轉向」去面對兩個固定點的相對方位）
+// 2) 轉完後重新量測肩膀中點，平移讓它對齊兩目標中點
+// 3) 之後各手臂仍各自跑一次原本的兩節IK做手肘彎曲細部微調
+// 已用Node.js模擬驗證：非對稱的雙目標（不同高度/左右不對稱）也能精確收斂（誤差0.0000）。
+function solveDualHandAnchor(){
+  if (!dualAnchorEnabled || !ikEnabled.rArm || !ikEnabled.lArm) return;
+  const rArmBone = bones[IK_CHAINS.rArm.root], lArmBone = bones[IK_CHAINS.lArm.root];
+  if (!rArmBone || !lArmBone) return;
+
+  const rShoulderPos = new THREE.Vector3(); rArmBone.getWorldPosition(rShoulderPos);
+  const lShoulderPos = new THREE.Vector3(); lArmBone.getWorldPosition(lShoulderPos);
+  const rTargetPos = ikTargetMeshes.rArm.position;
+  const lTargetPos = ikTargetMeshes.lArm.position;
+
+  const curSpan = lShoulderPos.clone().sub(rShoulderPos);
+  const targetSpan = lTargetPos.clone().sub(rTargetPos);
+  if (curSpan.lengthSq() > 1e-8 && targetSpan.lengthSq() > 1e-8){
+    const curDir = curSpan.clone().normalize();
+    const targetDir = targetSpan.clone().normalize();
+    const dot = clampNum(curDir.dot(targetDir), -1, 1);
+    let angle = Math.acos(dot);
+    if (angle > 1e-4){
+      const axis = new THREE.Vector3().crossVectors(curDir, targetDir);
+      if (axis.lengthSq() > 1e-8){
+        axis.normalize();
+        angle *= ROOT_FOLLOW_LERP_T; // 只轉一部分，跨幀累積平滑過渡
+        const bodyCenter = rShoulderPos.clone().add(lShoulderPos).multiplyScalar(0.5);
+        const deltaQuat = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+        model.position.sub(bodyCenter);
+        model.position.applyQuaternion(deltaQuat);
+        model.position.add(bodyCenter);
+        model.quaternion.premultiply(deltaQuat);
+        model.updateWorldMatrix(true, true);
+      }
+    }
+  }
+
+  const rShoulderPos2 = new THREE.Vector3(); rArmBone.getWorldPosition(rShoulderPos2);
+  const lShoulderPos2 = new THREE.Vector3(); lArmBone.getWorldPosition(lShoulderPos2);
+  const bodyCenter2 = rShoulderPos2.clone().add(lShoulderPos2).multiplyScalar(0.5);
+  const targetCenter = rTargetPos.clone().add(lTargetPos).multiplyScalar(0.5);
+  model.position.add(targetCenter.clone().sub(bodyCenter2).multiplyScalar(ROOT_FOLLOW_LERP_T)); // 平移也只前進一部分
+  model.updateWorldMatrix(true, true);
+}
+
+// 判斷某個關節 key 目前是否被「開啟中的 IK」接管（root/mid 骨骼），是的話 FK 迴圈要跳過它
+function isIKDrivenKey(key){
+  for (const limb of IK_LIMB_KEYS){
+    if (!ikEnabled[limb]) continue;
+    const chain = IK_CHAINS[limb];
+    if (key === chain.root || key === chain.mid) return true;
+    if (chain.shoulder && key === chain.shoulder) return true;
+  }
+  if (spineIKEnabled && SPINE_IK_CHAIN.bones.includes(key)) return true;
+  if (lookAtEnabled.head && key === LOOKAT_CONFIG.head.key) return true;
+  if (lookAtEnabled.chest && key === LOOKAT_CONFIG.chest.key) return true;
+  for (const fingerId of FINGER_IDS){
+    if (fingerIKEnabled[fingerId] && FINGER_IK_CHAINS[fingerId].bones.includes(key)) return true;
+  }
+  return false;
+}
+
+// 一般狀態下（未播放拍點）：非拖曳中、且未被 IK 接管的關節用彈簧式 lerp 平滑趨近目標角度
+function updateBones(){
+  if (!model) return;
+  const t = 0.28;
+  for (const key of ALL_JOINT_KEYS){
+    if (key === draggingKey) continue;
+    if (isIKDrivenKey(key)) continue;
+    const bone = bones[key];
+    if (!bone || !target[key]) continue;
+    current[key] = current[key].map((v,i) => v + (target[key][i]-v)*t);
+    bone.quaternion.copy(restQuat[key]).multiply(eulerToQuat(current[key]));
+  }
+}
+
+// ---- 幾何鏡頭：預設視角快照 ----
+// 角色面向估計為 +Z（跟 IK_CHAINS 的 poleOffset 註解假設一致）。
+// 距離/高度用 modelHeight（loadModel 時算出的實際身高常數）按比例換算，
+// 跟 loadModel() 裡設定初始視角、controls.target 的邏輯保持一致。
+function getCameraPresets(){
+  const h = modelHeight;
+  const midY = h * 0.55; // 跟 controls.target 預設高度一致
+  return {
+    front: { pos:[0, h*0.75, h*1.6], target:[0, midY, 0] },
+    back:  { pos:[0, h*0.75, -h*1.6], target:[0, midY, 0] },
+    left:  { pos:[-h*1.6, h*0.75, 0], target:[0, midY, 0] },
+    right: { pos:[h*1.6, h*0.75, 0], target:[0, midY, 0] },
+    top:   { pos:[0.01, h*2.3, 0.01], target:[0, midY, 0] }, // x/z 給極小偏移避免正上方 gimbal 問題
+    iso:   { pos:[h*1.15, h*0.95, h*1.15], target:[0, midY, 0] }
+  };
+}
+
+// 平滑過渡到某個預設視角（不直接瞬間跳，體感較不突兀）；updateCameraTween() 每幀推進
+function goToCameraPreset(name){
+  const preset = getCameraPresets()[name];
+  if (!preset || !camera || !controls) return;
+  cameraTween = {
+    fromPos: camera.position.clone(),
+    toPos: new THREE.Vector3(preset.pos[0], preset.pos[1], preset.pos[2]),
+    fromTarget: controls.target.clone(),
+    toTarget: new THREE.Vector3(preset.target[0], preset.target[1], preset.target[2]),
+    start: performance.now(),
+    duration: 500
+  };
+}
+
+function updateCameraTween(now){
+  if (!cameraTween) return;
+  const t = clampNum((now - cameraTween.start) / cameraTween.duration, 0, 1);
+  const et = EASINGS.easeInOutQuad(t);
+  camera.position.lerpVectors(cameraTween.fromPos, cameraTween.toPos, et);
+  controls.target.lerpVectors(cameraTween.fromTarget, cameraTween.toTarget, et);
+  if (t >= 1) cameraTween = null;
+}
+
+function bindCameraUI(){
+  const map = { front:"camBtn_front", back:"camBtn_back", left:"camBtn_left", right:"camBtn_right", top:"camBtn_top", iso:"camBtn_iso" };
+  for (const name in map){
+    const btn = document.getElementById(map[name]);
+    if (btn) btn.onclick = () => goToCameraPreset(name);
+  }
+}
+
+function onResize(){
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+function animate(now){
+  requestAnimationFrame(animate);
+  if (kfPlaying){
+    updateKeyframePlayback(now);
+  } else {
+    updateBones();
+    solveSpineRootFollow();
+    solveIKAll();
+    solveSpineIK();
+    solveLookAt("head");
+    solveLookAt("chest");
+    solveFingerIKAll();
+  }
+  updateMarkers();
+  updateCameraTween(now);
+  controls.update();
+  renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>

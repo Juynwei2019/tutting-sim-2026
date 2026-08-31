@@ -1,0 +1,358 @@
+# 功能實作規格：關節角度限制 + 動作生成（隨機姿勢生成器）
+
+> 這份文件是把已經在「3D Tutting 模擬器」實作完成的功能，抽出來寫成一份可重複使用的實作
+> 規格。目的是讓另一個 AI session（或開發者）在**類似架構**的骨架動畫系統上，重現一模一樣
+> 的功能與行為，而不需要重新做設計決策。
+
+## 0. 前提假設（目標系統需具備的架構）
+
+這份規格假設目標專案已經有以下角度控制系統，這是接入限制功能的前提：
+
+- 骨架用 THREE.Bone（或等價物），每個可控關節有一個穩定的 `key`（字串）。
+- 每個關節有一個 `restQuat[key]`：模型載入完成、尚未套用任何姿勢前的初始四元數。
+- 有全域的 `target[key] = [x, y, z]`（度）與 `current[key] = [x, y, z]`：代表「相對 rest pose」
+  的歐拉角（旋轉順序固定，例如 `"XYZ"`），`current` 每幀用某種 lerp/彈簧逼近 `target`。
+- 有一個統一入口函式 `setTarget(key, xyz)`：寫入 `target`/`current`，所有「套用姿勢庫、JSON
+  匯入、關鍵影格套用、單一關節歸零」等操作都要走這個函式，而不是直接改 `target[key] = ...`。
+- 有一個「拖曳關節球 → 讀回角度」的函式（此處稱 `commitFromBone(key)`）：使用者用類似
+  TransformControls 的 gizmo 直接旋轉某個骨骼後，換算出相對 rest pose 的歐拉角，寫回
+  `target`/`current`。
+- 有一份所有可控關節 key 的清單（此處稱 `ALL_JOINT_KEYS`）與對應的中文/顯示名稱查表
+  （此處稱 `LABEL_LOOKUP`）。
+- 有一份「依身體部位分組」的清單，用於總覽面板等地方顯示分組（此處稱 `OVERVIEW_GROUPS`），
+  格式例如：
+  ```js
+  const OVERVIEW_GROUPS = [
+    { id:"body", label:"軀幹／頭部", keys:["hips","spine","neck","head"] },
+    { id:"rArm", label:"右手臂", keys:["rShoulder","rArm","rForeArm","rHand"] },
+    { id:"rFingers", label:"右手指", keys:[...30根手指key裡屬於右手的...], collapsedByDefault:true },
+    // ...
+  ];
+  ```
+- 若系統另外有 IK（兩節解析解／CCD）與「看向(lookAt)」這類**直接改骨骼四元數、再回填
+  target** 的機制，先當作**不在本次限制範圍內**（見第 5 節但書）。
+
+若目標系統沒有上述其中某一塊，先補齊對應機制，再套用下面的設計。
+
+---
+
+## 1. 目標與範圍
+
+在既有系統上加兩個功能：
+
+1. **關節角度限制（Joint Limits）**：可以對「全部關節」的每一軸（X/Y/Z）各自設定
+   「是否啟用限制」＋「最小角度」＋「最大角度」（單位：度，相對 rest pose）。啟用後，
+   下列操作都不能讓該軸超出範圍：
+   - 拖曳關節球（gizmo）
+   - 套用姿勢庫 / JSON 匯入 / 關鍵影格套用
+   - 「此關節歸零」之類的重置操作
+   - Undo/Redo 還原歷史紀錄
+2. **動作生成（Generate Random Pose）**：按一個按鈕，對所有「有啟用限制」的關節軸各自
+   隨機取一個合法角度並套用到目前姿勢，其餘軸/關節維持不動。取樣策略要能做出俐落、
+   卡點到位的姿勢感（不是軟趴趴的隨機值）。
+
+範圍決策（可依實際需求調整，但這是本次採用的版本）：
+- **涵蓋全部關節**（`JOINT_LIMIT_KEYS = ALL_JOINT_KEYS`），包含軀幹、頭、肩胛、手臂、腿、
+  左右手全部指節。
+- **不做左右鏡像**：左右關節各自獨立設定、獨立隨機，不提供「複製到另一側」或反號功能。
+- **IK 與 lookAt 不套用限制**（見第 5 節），先只處理 FK 路徑。
+- **只做「單次生成」**：按一次按鈕＝套用一個隨機姿勢到當下；不做「自動產生 N 個關鍵
+  影格灌進時間軸」的整段生成（那是可以做為下一步擴充的方向，見第 6 節）。
+
+---
+
+## 2. 資料結構
+
+```js
+// 涵蓋全部關節：直接沿用系統既有的關節 key 清單
+const JOINT_LIMIT_KEYS = ALL_JOINT_KEYS;
+const JOINT_LIMITS_STORAGE_KEY = "tuttingJointLimits"; // localStorage key，依專案改名
+
+function defaultJointLimits(){
+  const obj = {};
+  for (const k of JOINT_LIMIT_KEYS){
+    obj[k] = {
+      x: { enabled:false, min:-180, max:180 },
+      y: { enabled:false, min:-180, max:180 },
+      z: { enabled:false, min:-180, max:180 }
+    };
+  }
+  return obj;
+}
+let JOINT_LIMITS = defaultJointLimits();
+loadJointLimits(); // 開頁就從 localStorage 還原（若有）
+
+function loadJointLimits(){
+  try {
+    const raw = localStorage.getItem(JOINT_LIMITS_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    for (const k of JOINT_LIMIT_KEYS){
+      if (!saved[k]) continue;
+      for (const axis of ["x","y","z"]){
+        if (saved[k][axis]) Object.assign(JOINT_LIMITS[k][axis], saved[k][axis]);
+      }
+    }
+  } catch (e){ console.warn("關節限制讀取失敗:", e); }
+}
+
+function saveJointLimits(){
+  try { localStorage.setItem(JOINT_LIMITS_STORAGE_KEY, JSON.stringify(JOINT_LIMITS)); }
+  catch (e){ console.warn("關節限制儲存失敗:", e); }
+}
+```
+
+設計要點：
+- **預設全部軸都是 `enabled:false`**。理由：實作者/AI 無法在不實際操作模型的情況下確定
+  每個骨架每一軸的真實彎曲方向與合理範圍，寫死預設值可能誤導使用者。應該讓使用者自己
+  拖動關節、觀察角度後再設定，而不是先斬後奏。
+- 沒有被設定限制的 key（理論上因為涵蓋全部關節所以不會發生，但保留這個容錯）以及沒啟用
+  的軸，一律「原樣放行」，不影響既有行為。
+- 用 `localStorage` 持久化，跟專案既有的姿勢庫/自動存檔用同一種做法即可，不需要額外機制。
+
+---
+
+## 3. Clamp 核心邏輯與整合點
+
+```js
+// 單一軸的夾緊：未啟用直接放行；min/max填反時自動互換，避免使用者填錯直接把角度鎖死。
+function clampAxisValue(v, axisLimit){
+  if (!axisLimit || !axisLimit.enabled) return v;
+  let lo = axisLimit.min, hi = axisLimit.max;
+  if (lo > hi){ const t = lo; lo = hi; hi = t; }
+  return Math.min(hi, Math.max(lo, v));
+}
+
+// 對外主要入口：傳入 jointKey + [x,y,z]，回傳夾緊後的新陣列（不修改原陣列）。
+function clampJointAngles(key, xyz){
+  const lim = JOINT_LIMITS[key];
+  if (!lim) return xyz;
+  return [
+    clampAxisValue(xyz[0], lim.x),
+    clampAxisValue(xyz[1], lim.y),
+    clampAxisValue(xyz[2], lim.z)
+  ];
+}
+```
+
+**要插入的寫入點**（這是整個功能能不能生效的關鍵，逐一檢查目標系統對應的函式）：
+
+1. **`setTarget(key, xyz)`** —— 姿勢庫/JSON匯入/關鍵影格套用/歸零都會經過這裡，只要在寫入
+   前 clamp 一次即可：
+   ```js
+   function setTarget(name, xyz){
+     const c = clampJointAngles(name, xyz);
+     target[name] = c.slice();
+     current[name] = c.slice();
+   }
+   ```
+
+2. **拖曳關節球讀回角度的函式（`commitFromBone`）** —— 這裡最容易漏掉一個細節：
+   算出角度後如果被 clamp 改變了，**必須把 clamp 後的角度重新寫回骨骼本身的
+   quaternion**，否則畫面上骨骼已經轉超過上限，放開滑鼠才彈回去，手感會很奇怪。
+   正確做法是在拖曳過程中把骨骼「頂」在限制邊界上：
+   ```js
+   function commitFromBone(key){
+     const bone = bones[key];
+     if (!bone || !restQuat[key]) return;
+     const deltaQuat = restQuat[key].clone().invert().multiply(bone.quaternion);
+     const e = new THREE.Euler().setFromQuaternion(deltaQuat, "XYZ");
+     let deg = [/* 轉度數、四捨五入 */];
+     const clamped = clampJointAngles(key, deg);
+     if (clamped[0] !== deg[0] || clamped[1] !== deg[1] || clamped[2] !== deg[2]){
+       deg = clamped;
+       bone.quaternion.copy(restQuat[key]).multiply(eulerToQuat(deg)); // 用clamp後角度重寫骨骼
+     }
+     target[key] = deg;
+     current[key] = deg.slice();
+   }
+   ```
+
+3. **Undo/Redo 還原歷史紀錄** —— 從歷史快照套回 `target`/`current` 時，同樣要先 clamp
+   一次，避免復原到「限制設定變更前」的舊值時角度已經不合法：
+   ```js
+   for (const k of ALL_JOINT_KEYS){
+     const v = clampJointAngles(k, snap.target[k] || [0,0,0]);
+     target[k] = v.slice();
+     current[k] = v.slice();
+   }
+   ```
+
+4. **UI 上任何一個限制輸入框改變時**，除了更新 `JOINT_LIMITS`、存檔之外，也要立刻對
+   「目前姿勢」重新跑一次 `setTarget(key, target[key])`，這樣使用者剛勾選啟用/改min-max，
+   如果目前姿勢剛好超出新範圍，會馬上被收回來，不用等下次操作才生效。
+
+**不需要改的地方**：角度逼近的 lerp 邏輯（`current` 追 `target` 的那段）本身不用改，因為
+`target` 已經保證是合法值，`current` 只是逐幀逼近它。
+
+---
+
+## 4. UI 設計
+
+### 4.1 分頁與版面
+
+新增一個分頁（此處稱「關節限制」），內容：
+
+```
+[說明文字：解釋限制怎麼運作、建議操作流程]
+[搜尋框：輸入關鍵字篩選關節名稱]  [全部展開]  [全部收合]
+[🎲 動作生成] 格距[__]° 貼邊機率[__]%
+[全部恢復預設（停用限制）]
+[分組列表容器]
+```
+
+### 4.2 分組收納（重點：不要把全部關節攤平成一長串）
+
+**直接沿用系統既有的 `OVERVIEW_GROUPS` 分組設定**，不要重新發明一套分組規則：
+- 依 `OVERVIEW_GROUPS` 逐組建立一個可收合的區塊（標題列 + 內容格），標題列顯示
+  「組名 + 幾個關節」，點擊標題列切換收合狀態，狀態存在一個 `groupId -> bool` 的物件裡
+  （跟總覽面板的收合狀態分開存，不要共用同一份 state，因為使用者可能想要總覽面板全部
+  展開，但關節限制面板只想看手臂那組）。
+- 手指那幾組預設收合（`collapsedByDefault:true`，沿用 `OVERVIEW_GROUPS` 上既有的標記）。
+- 內容格裡用 CSS Grid（`grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))`）排列
+  每個關節的卡片，讓卡片自動依可用寬度排成多欄一列，而不是寫死欄數；小螢幕降低
+  `minmax` 的下限即可自動變成更少欄。
+
+### 4.3 單一關節卡片內容
+
+每個關節一張小卡片：
+- 標題：關節中文名稱 ＋ 旁邊即時顯示「目前角度」（例如 `X12° Y0° Z-30°`），方便使用者
+  邊拖曳關節邊回來看數字設定範圍。
+- 三行（X/Y/Z 各一行）：
+  `[啟用checkbox] [軸標籤] [最小值輸入框] ~ [最大值輸入框] °`
+  未啟用時兩個輸入框要 disable（灰階），視覺上清楚表示「這軸目前沒有限制」。
+
+「目前角度」文字**只在這個分頁是目前作用中分頁時**才逐幀更新（跟系統既有的「總覽」面板
+用同一種節流方式判斷：`if (!panel.classList.contains("active")) return;`），避免使用者
+根本沒在看這個分頁時還浪費效能重複寫 DOM。分頁被建立/重建完，以及使用者切換分頁進來時，
+都要立刻強制刷新一次（傳一個 `force=true` 參數），不要等下一個 render frame 才有數字。
+
+### 4.4 搜尋 / 展開收合
+
+- 搜尋框：比對 `LABEL_LOOKUP[key]`（中文名稱）跟原始 `key` 字串（忽略大小寫），符合的
+  關節才顯示；某個分組篩完一個都不剩就整組不顯示標題。
+- 全部展開／全部收合：把每個 group 的收合狀態一次設成 false/true，然後整個面板重建。
+
+---
+
+## 5. 動作生成（隨機姿勢生成器）
+
+### 5.1 取樣策略：格點取樣 + 偏向極值
+
+單純在 `[min, max]` 之間連續均勻隨機，角度分佈太「軟」，看不出俐落卡點的動作感。改用：
+- 一定機率（可調，預設 40%）直接取 `min` 或 `max`（=完全伸直 / 完全折死，各 50% 機率）。
+- 其餘機率時，在 `[min, max]` 之間依固定格距（可調，預設 15°）取一個格點值，而不是
+  任意浮點數。
+
+```js
+function sampleAxisAngle(axisLim, gridStep, edgeProb){
+  if (!axisLim || !axisLim.enabled) return null; // null＝沒有範圍，呼叫端維持原值
+  let lo = axisLim.min, hi = axisLim.max;
+  if (lo > hi){ const t = lo; lo = hi; hi = t; }
+  if (hi - lo < 1e-6) return lo;
+
+  if (Math.random() < edgeProb){
+    return Math.random() < 0.5 ? lo : hi;
+  }
+  if (gridStep > 0){
+    const steps = Math.floor((hi - lo) / gridStep);
+    if (steps <= 0) return lo;
+    const idx = Math.floor(Math.random() * (steps + 1));
+    return lo + idx * gridStep;
+  }
+  return lo + Math.random() * (hi - lo);
+}
+```
+
+`gridStep` 與 `edgeProb` 兩個參數直接讀 UI 上的兩個輸入框，讓使用者可以邊調邊按按鈕
+試手感，不用寫死常數。
+
+### 5.2 套用邏輯
+
+```js
+function generateRandomPose(){
+  const gridStep = /* 讀UI輸入，預設15 */;
+  const edgeProb = /* 讀UI輸入(百分比)/100，預設0.4 */;
+
+  // 沒有任何關節/軸啟用限制時，跳提示並中止，不要生成出一個「全部維持原狀」的無意義結果。
+  let anyEnabled = false;
+  for (const key of JOINT_LIMIT_KEYS){
+    const lim = JOINT_LIMITS[key];
+    if (lim.x.enabled || lim.y.enabled || lim.z.enabled) { anyEnabled = true; break; }
+  }
+  if (!anyEnabled){ alert("尚未啟用任何限制，沒有範圍可以隨機。"); return; }
+
+  for (const key of JOINT_LIMIT_KEYS){
+    if (!bones[key]) continue; // 有些key在特定模型上可能沒有對應骨骼，跳過
+    const lim = JOINT_LIMITS[key];
+    const cur = target[key] || [0,0,0];
+    const xyz = [
+      sampleAxisAngle(lim.x, gridStep, edgeProb),
+      sampleAxisAngle(lim.y, gridStep, edgeProb),
+      sampleAxisAngle(lim.z, gridStep, edgeProb)
+    ].map((v, i) => v === null ? cur[i] : v); // 沒啟用的軸維持原值，不要生成隨機值
+    setTarget(key, xyz); // 內部本身也會clamp，雙重保險
+  }
+  pushHistory(); // 接進既有Undo/Redo，讓使用者可以直接Ctrl+Z重骰
+}
+```
+
+要點：
+- **只隨機「有啟用限制」的軸**；沒啟用的軸讀 `target[key]` 目前值原樣帶回去，不要
+  意外亂動使用者沒設定過的關節。
+- **一定要接進既有的 Undo/Redo 機制**（例如呼叫 `pushHistory()`），讓使用者對生成結果
+  不滿意時可以直接復原重骰，不用另外做「復原上一次生成」的專屬機制。
+- **完全沒有任何啟用限制時要擋下來並提示**，不要默默生成一個什麼都沒變的結果讓使用者
+  以為按鈕壞掉。
+
+---
+
+## 6. 已知限制／但書（務必誠實告知使用者，不要隱藏）
+
+1. **只保護 FK 路徑，不保護 IK / lookAt**：如果系統另外有兩節/CCD 之類的 IK 求解，或是
+   頭部「看向」某個目標球的功能，這些通常是「直接算出角度寫進骨骼四元數，再回填
+   target」的機制（跟 `commitFromBone` 同一種模式，但沒有 clamp）。除非額外把 clamp
+   邏輯放進 IK 求解的每次疊代裡（工程量明顯更大，且clamp發生在疊代中途可能讓
+   effector對不上目標位置，視覺上像卡頓/彈跳），否則這條路徑會繞過限制。這是刻意
+   延後的範圍，不是遺漏，但要讓使用者知道。
+2. **關鍵影格「播放」時的插值可能瞬間超界**：如果系統的關鍵影格播放是用四元數 slerp
+   直接內插兩個姿勢（而不是先轉回歐拉角逐軸內插），即使起點終點都合法，插值路徑
+   中間理論上仍有極小機率某一軸瞬間超出限制（因為 slerp 是在四元數流形上，不是逐軸
+   線性）。肉眼通常難以察覺，但要註明這是精確度換取簡單度的取捨。
+3. **歐拉角分軸限制對球窩關節只是近似值**：肩膀、髖這類多自由度關節，用 XYZ 分軸各自
+   限制在極端組合下可能不完全符合真實人體限制，也可能遇到 gimbal lock。這是採用歐拉角
+   表示法的固有限制，不是實作錯誤。
+4. **不做左右鏡像**：左右關節的限制與生成完全獨立，沒有「複製到另一側」的輔助功能。
+   如果目標系統的骨架左右軸向定義不確定（例如不確定右手肘彎曲是 +X 還是 -X），也不要
+   自己猜一個預設值寫死——正確做法是全部軸預設 `enabled:false`，引導使用者自己測試後
+   填入。
+
+---
+
+## 7. 可能的後續擴充方向（本次不做，但架構上要留餘地）
+
+- **整段生成**：迴圈呼叫 5.2 的隨機邏輯 + 系統既有的「新增關鍵影格」函式 N 次，直接把
+  一串隨機拍點灌進時間軸，配 BPM 播放成一小段連續動作。因為 `JOINT_LIMITS` /
+  `generateRandomPose` 的介面已經是「呼叫一次＝套用一個合法隨機姿勢到當下 target」，
+  這個擴充只需要在外面包一層迴圈＋呼叫 addKeyframe()，不需要改動本次做的任何底層邏輯。
+- **左右鏡像開關**：加一個「鏡像」checkbox，開啟時只隨機/編輯其中一側，另一側直接複製
+  數值（不反號）。如果之後要做「反號鏡像」，需要先讓使用者測試/標註每個關節每一軸的
+  鏡像關係，不能靠猜測。
+- **IK 也套用限制**：需要在 IK 求解的每次疊代之後，對該節骨骼立即 clamp 再繼續下一次
+  疊代，而不是等整個 IK 解完才 clamp 一次（那樣會讓 clamp 後的最終姿勢跟 IK 原本收斂的
+  解不一致，看起來像抖動）。
+
+---
+
+## 8. 驗收檢查清單
+
+- [ ] 全部關節、每軸都能獨立啟用/停用限制，數值可編輯，重新整理頁面後設定還在。
+- [ ] 拖曳關節球時，超過限制的軸會被卡在邊界上，不會等放開滑鼠才彈回去。
+- [ ] 套用姿勢庫／匯入 JSON／套用關鍵影格／單一關節歸零時，超出限制的角度會被夾回範圍內。
+- [ ] Undo/Redo 復原時角度依然合法。
+- [ ] 面板依身體部位分組、可個別收合，手指類分組預設收合。
+- [ ] 搜尋框可以用中文名稱或 key 篩選關節。
+- [ ] 完全沒啟用任何限制時按「動作生成」會提示，不會靜默生成無變化的結果。
+- [ ] 「動作生成」只會改動「有啟用限制」的軸，其餘軸/關節維持原狀。
+- [ ] 生成結果可以用 Ctrl+Z／既有 Undo 復原。
+- [ ] IK / lookAt 路徑不受限制這件事，有在 UI 文案或文件中明確告知使用者。

@@ -1,0 +1,88 @@
+# IK 扶握箱功能 — 開發紀錄與後續 Prompt（更新版）
+
+適用檔案：`tutting_3d_simulator_D21.html`（單一 HTML，無外部 .js 檔，
+沿用原專案架構：無建置工具、three.js r160 + TransformControls，
+本機跑 `python3 -m http.server` 開啟）。
+
+## 原始需求（逐字保留，供之後比對驗收）
+1. 在胸口正前方出現一個透明箱子
+2. 可以調整箱子的長寬高
+3. 先調整雙手到箱子的任意位置
+4. 點選扶握箱子功能
+5. 雙手就會貼合箱子
+6. 使用滑鼠移動旋轉箱子，雙手也會跟著移動
+
+（後續追加需求：箱子形狀要能換成 ConeGeometry／CylinderGeometry／DodecahedronGeometry 等；
+扶握功能要跟主程式解耦；最後改成「不拆檔案，但程式碼邏輯要分區」＋「獨立成一個頁簽」。）
+
+## 目前完成度
+- ✅ 長方體／球體／圓柱三種形狀（精確解，見下方「貼合演算法」）
+- ⏳ 圓錐、十二面體、二十面體、八面體、四面體（規劃中，近似解，尚未實作）
+- ✅ 扶握箱有自己的頁簽（「扶握箱」，跟「手腳 IK」平行），不再塞在 IK 頁簽裡
+- ✅ 核心邏輯／UI 在程式碼裡是兩個獨立區塊（同一個 `<script type="module">` 內，用註解框線分隔），
+  不是獨立檔案——最初拆成 `grabBoxCore.js` + `grabBoxUI.js` 兩個檔案，
+  後來依需求改回單一 HTML，但保留「只透過方法呼叫＋訂閱溝通」的介面設計
+
+## 架構重點
+
+**核心邏輯區塊**（`createGrabBoxCore(deps)`）：一個工廠函式，回傳一組方法。
+內部狀態（`grabShapeType`、`grabBox`、`grabAttach`...）全部是 closure 變數，外部拿不到也改不到，
+只能透過回傳的方法操作：
+```
+setVisible(on) / setMode(mode) / setShapeType(type) / setShapeParam(shape,key,value)
+setGrabHand(limb,on) / releaseHand(limb)
+getState() → { shapeType, shapeParams, visible, mode, grabbed }
+onChange(fn) → 訂閱狀態變化，回傳取消訂閱函式
+buildAfterModelLoad() / updateEachFrame()
+```
+依賴用「讀取用函式」注入（`getBones`、`getIKTargetMesh`、`isIKEnabled`、`setIKEnabled`），
+不是直接傳物件參照，避免主程式之後改變這些物件時，核心還抱著舊的參照。
+
+**UI 區塊**（`mountGrabBoxUI(container, core)`）：注入面板 HTML、綁定 DOM 事件，
+完全不 import three.js、不知道 geometry 或貼合演算法怎麼算。
+單向資料流：使用者操作 → 呼叫 `core.setXxx(...)` → 核心狀態變 → `notify()` →
+UI 訂閱的 `render(state)` 被觸發 → 面板重新畫成最新狀態（按鈕 active 樣式、滑桿數值、
+checkbox 勾選、哪組滑桿該顯示）。UI 永遠不用自己另外記狀態。
+
+**形狀資料模型**：`grabShapeParams` 是「每種形狀各自一份參數」的字典
+（`{box:{w,h,d}, sphere:{r}, cylinder:{r,h}}`），切換形狀不會互相覆蓋，
+之前調過的尺寸換回來還在。Geometry 直接用真實尺寸建構（不是「unit geometry + scale」），
+因為非等比例 scale 對球體/多面體這類形狀會讓外觀失真（球變橢球）。
+
+**貼合演算法**（`GRAB_SHAPE_CLOSEST_POINT` 依 `grabShapeType` 分派）：
+- **長方體**：AABB clamp；點在箱內時額外判斷「離哪一面最近」推出去
+- **球體**：球心到點的方向乘半徑，最簡單，每個方向都對稱不用判斷內外
+- **圓柱**：對 Y 軸旋轉對稱，外部點「徑向 clamp 到 r、高度 clamp 到 ±halfH」剛好就是精確解
+  （含端蓋邊緣那圈轉角也對）；內部點才需要判斷推去側面還是端蓋。
+  這三種都是**精確解**，已經用獨立 node 腳本手算數值驗證過（見對話紀錄），不是近似。
+- 圓錐／多面體：規劃中會是**近似解**（圓錐用線性半徑近似；多面體用徑向投影到球面近似），
+  精確解需要逐面比對法向量距離，實作量明顯變大，先用近似版本，視覺夠用再說
+
+**扶握狀態聯動**（避免殘留錯誤綁定）：
+- 手動關掉某隻手的 IK → 主程式呼叫 `grabBoxCore.releaseHand(limb)` 通知核心釋放
+- 隱藏扶握箱 → 核心內部自動釋放兩手扶握
+- 扶握時若該手 IK 尚未開啟，核心會自動呼叫 `setIKEnabled` 開啟
+- 換形狀／改尺寸時 → 核心呼叫 `reprojectGrabbedHands()`，把正在扶著的手依「現在的世界座標」
+  重新投影到新的表面（不會殘留舊形狀的本地座標）
+
+**跟主迴圈的接點**：`animate()` 裡在 `solveIKAll()` 之前呼叫 `grabBoxCore.updateEachFrame()`，
+把扶著箱子的手的 IK 目標位置更新好，再交給既有的兩節解析解 IK 求解——完全重用原本的手臂 IK 管線。
+
+## 待驗證項目
+- [ ] 箱子初始位置是否真的落在胸口正前方（`+Z` 面向假設，跟既有 IK 極向球是同一個假設）
+- [ ] 球體/圓柱扶握時手是否確實貼在表面，切形狀/拖尺寸時手是否正確重新貼合
+- [ ] 箱子旋轉幅度較大時，手臂 IK 極向球（彎肘方向）是否需要手動調整
+- [ ] `+新增拍點` 記錄扶握姿勢後，時間軸播放時箱子本身不會動（只有骨骼角度被記錄），
+      是預期行為還是需要另外把箱子位置也存進拍點
+
+## 後續可能的延伸 Prompt（可直接沿用）
+
+> 在 tutting_3d_simulator_D21.html 的 IK 扶握箱功能基礎上，
+> 幫我加上圓錐（ConeGeometry）跟十二面體（DodecahedronGeometry）兩種形狀：
+> 在 GRAB_SHAPE_DEFAULTS 補預設參數、buildGrabShapeGeometry 補 case、
+> GRAB_SHAPE_CLOSEST_POINT 補對應的近似貼合演算法，
+> 並在 grabBoxUI 的 PANEL_HTML／SHAPE_PARAM_INPUTS 補上對應的下拉選項跟滑桿。
+
+> 在扶握箱功能基礎上，幫我加上「扶握姿勢也存進拍點」：新增拍點時，如果當下有手在扶箱子，
+> 把箱子的 position/quaternion/shapeType/shapeParams 也一併存進該筆 keyframe，
+> 播放時連同骨骼角度一起套用到箱子上。

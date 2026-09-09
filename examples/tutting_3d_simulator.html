@@ -11,6 +11,15 @@
   #title { position:absolute; top:14px; left:18px; color:#7fe0ff; font-size:13px; letter-spacing:2px; opacity:.75; }
   #hint { position:absolute; top:14px; right:18px; font-size:11px; color:#555580; text-align:right; line-height:1.5; }
 
+  /* ---- 目前選取狀態：從底部面板搬到畫面右上角，隨時可見不必展開面板 ---- */
+  #selectedStatusBox { position:absolute; top:14px; right:18px; z-index:6; display:flex; align-items:center;
+    gap:8px; padding:7px 12px; background:#0f0f20e6; border:1px solid #26264a; border-radius:8px;
+    font-size:12px; color:#9a9ac2; box-shadow:0 2px 12px rgba(0,0,0,.4); white-space:nowrap; }
+  @media (max-width:640px){
+    #selectedStatusBox { top:14px; right:8px; font-size:10px; padding:5px 8px; gap:5px; max-width:62vw;
+      white-space:normal; }
+  }
+
   /* ---- 分割視窗：唯讀同步預覽小視窗，疊在主畫面右上角、往下堆疊 ---- */
   #splitViewPanes { position:absolute; top:96px; right:18px; display:flex; flex-direction:column;
     gap:8px; z-index:5; pointer-events:none; }
@@ -23,6 +32,40 @@
     #splitViewPanes { top:100px; right:8px; gap:6px; }
     .splitPane { width:120px; height:76px; }
   }
+
+  /* ---- 顯示設定小面板：身體/手部關節球、骨架、碰撞可視化，整合在一起，疊在主畫面左上角、標題下方 ---- */
+  #displayTogglesPanel { position:absolute; top:44px; left:18px; z-index:5; width:200px;
+    border:1px solid #3a3a66; border-radius:8px; overflow:hidden;
+    background:#0f0f20e6; box-shadow:0 2px 12px rgba(0,0,0,.5); }
+  #displayTogglesHeader { display:flex; align-items:center; justify-content:space-between; gap:6px;
+    padding:6px 6px 6px 10px; background:#14142a; }
+  #displayTogglesHeader .dtTitle { font-size:11px; color:#7fe0ff; letter-spacing:1px; }
+  #displayTogglesCollapseBtn { background:none; border:none; color:#7a7aa8; font-size:11px;
+    padding:3px 6px; cursor:pointer; transition:transform .15s ease, color .12s; }
+  #displayTogglesCollapseBtn:hover { color:#7fe0ff; }
+  #displayTogglesPanel.collapsed #displayTogglesCollapseBtn { transform:rotate(-90deg); }
+  #displayTogglesBody { display:flex; flex-direction:column; gap:7px; padding:9px 10px 10px; }
+  #displayTogglesPanel.collapsed #displayTogglesBody { display:none; }
+  #displayTogglesBody label { display:flex; align-items:center; gap:6px; font-size:11px;
+    color:#cfd6ff; cursor:pointer; white-space:nowrap; }
+  @media (max-width:640px){
+    #displayTogglesPanel { top:48px; left:8px; width:170px; }
+  }
+
+  /* ---- 效能面板：FPS／單幀耗時／Draw Call／三角形數。疊在右上角，卡在
+     #selectedStatusBox 下緣跟 #splitViewPanes 上緣之間原本就留著的空隙，
+     跟閒置降頻機制共用同一份計時資訊，方便直接驗證降頻有沒有生效。
+     滑鼠移上去可看到主循環(rAF)實際頻率（用既有的全站 Tooltip 系統）。---- */
+  #perfPanel { position:absolute; top:48px; right:18px; z-index:6; display:none;
+    flex-direction:column; gap:2px; padding:6px 11px; background:#0f0f20e6; border:1px solid #26264a;
+    border-radius:8px; font-size:11px; color:#9a9ac2; font-family:monospace; letter-spacing:.2px;
+    box-shadow:0 2px 12px rgba(0,0,0,.4); white-space:nowrap; cursor:help; }
+  #perfPanel .perfRow { display:flex; align-items:center; gap:6px; }
+  #perfFps { color:#7fe0ff; }
+  @media (max-width:640px){
+    #perfPanel { top:44px; right:8px; font-size:10px; padding:5px 8px; }
+  }
+
   #loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:#7fe0ff; font-size:14px; letter-spacing:2px; background:#0a0a12; }
   #ui { position:absolute; left:0; right:0; bottom:0; padding:12px 16px 16px; box-sizing:border-box;
@@ -68,6 +111,30 @@
   body.uiFloatDragging { cursor:move !important; user-select:none; }
   body.uiFloatResizing { cursor:nwse-resize !important; user-select:none; }
 
+  /* ---- 通用「可浮動＋可調整大小」小面板（目前用於手指面板彈出視窗）----
+     跟上面 #ui 的浮動模式是同一套拖曳/縮放手感，但抽成獨立、跟主面板無關的浮動容器，
+     可以之後套用在其他分頁上，不綁死在單一個面板。 ---- */
+  .floatablePanel { position:fixed; z-index:20; display:flex; flex-direction:column; box-sizing:border-box;
+    background:linear-gradient(to top, rgba(10,10,18,.98), rgba(10,10,18,.94));
+    border:1px solid #3a3a66; border-radius:9px; box-shadow:0 10px 34px rgba(0,0,0,.55); overflow:hidden; }
+  .floatablePanelHeader { display:flex; align-items:center; gap:8px; height:26px; padding:0 6px 0 10px;
+    cursor:move; touch-action:none; background:#14142a; flex:0 0 auto; }
+  .floatablePanelHeader .grip { width:26px; height:4px; border-radius:2px; background:#3a3a66; transition:background .12s; }
+  .floatablePanelHeader:hover .grip { background:#7fe0ff; }
+  .floatablePanelTitle { font-size:11px; color:#7fe0ff; letter-spacing:1px; white-space:nowrap; flex:1 1 auto; }
+  .floatablePanelDockBtn { background:none; border:1px solid #3a3a66; color:#9a9ac2; font-size:10px;
+    padding:3px 8px; border-radius:5px; cursor:pointer; }
+  .floatablePanelDockBtn:hover { color:#7fe0ff; border-color:#6a6aff; }
+  .floatablePanelBody { flex:1 1 auto; overflow:auto; padding:9px 10px 10px; min-height:0; }
+  .floatablePanelResizeHandle { position:absolute; right:0; bottom:0; width:20px; height:20px;
+    cursor:nwse-resize; touch-action:none; }
+  .floatablePanelResizeHandle::before { content:""; position:absolute; right:4px; bottom:4px; width:9px; height:9px;
+    border-right:2px solid #3a3a66; border-bottom:2px solid #3a3a66; border-radius:0 0 2px 0; }
+  .floatablePanelResizeHandle:hover::before { border-color:#7fe0ff; }
+  /* 浮動視窗裡的手指卡片改直排（寬度通常比主面板窄），並讓卡片本身可各自捲動 */
+  .floatablePanelBody .fingerHandGrid { grid-template-columns:1fr; height:100%; }
+  .floatablePanelBody .fingerHandCard { overflow-y:auto; }
+
   /* ---- 常駐區（主控列＋選取狀態） ---- */
   #uiCommon { flex:0 0 auto; }
 
@@ -90,6 +157,7 @@
   button.active { background:#ff2f7e; border-color:#ff2f7e; color:#0a0a12; font-weight:bold; }
   #kfPlayBtn { background:#ffb400; border-color:#ffb400; color:#2a1a00; font-weight:bold; min-width:96px; }
   #kfPlayBtn.playing { background:#ff4757; border-color:#ff4757; color:#fff; }
+  .iconToggleBtn { min-width:0; width:28px; padding:4px 0; font-size:13px; line-height:1; } /* 圖示按鈕：不用跟文字按鈕一樣寬，維持正方形好按 */
   label { font-size:11px; color:#9a9ac2; white-space:nowrap; }
   input[type=range] { -webkit-appearance:none; width:90px; height:3px; background:#33335a; border-radius:2px; outline:none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:#7fe0ff; cursor:pointer; }
@@ -124,20 +192,46 @@
     padding:8px; resize:vertical;
   }
 
-  #kfList { gap:6px; max-height:32vh; overflow-y:auto; align-content:flex-start; margin-bottom:0;
-    padding:2px 2px 4px; }
+  /* 拍點清單：改成單列橫向排列（原本 .row 的 flex-wrap:wrap 會讓拍點多了自動換行、
+     往下長成一大塊垂直清單，跟「時間軸」由左到右＝時間先後的概念不一致，也很佔垂直空間）。
+     nowrap + overflow-x 讓它變成一條可橫向捲動的時間軸；上下留一點padding是為了不讓
+     .playing 的橘色發光 box-shadow 被容器裁掉。 */
+  #kfList { gap:6px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; align-content:flex-start;
+    margin-bottom:0; padding:6px 2px 8px; -webkit-overflow-scrolling:touch; }
+  #kfList::-webkit-scrollbar { height:6px; }
+  #kfList::-webkit-scrollbar-track { background:#14142a; border-radius:3px; }
+  #kfList::-webkit-scrollbar-thumb { background:#3a3a66; border-radius:3px; }
+  #kfList::-webkit-scrollbar-thumb:hover { background:#6a6aff; }
   .kfChip {
     display:flex; align-items:center; gap:2px; background:#16162a; border:1px solid #3a3a66;
     border-radius:6px; padding:2px 2px 2px 10px; font-size:11px; color:#cfd6ff;
+    flex:0 0 auto; /* 單列橫向捲動時，拍點本身的寬度不能被擠壓縮小，一律照內容自然寬度排開 */
   }
   .kfChip.active { border-color:#7fe0ff; color:#7fe0ff; }
   .kfChip.playing { border-color:#ffb400; box-shadow:0 0 8px #ffb400aa; }
+  .kfChip { cursor:grab; }
+  .kfChip.dragging { opacity:.4; }
+  .kfChip.dragOver { border-color:#9944ff; box-shadow:0 0 0 2px #9944ff66 inset; }
   .kfChip .sel { background:none; border:none; color:inherit; font-size:11px; padding:5px 4px; cursor:pointer; }
+  .kfChip .dup { background:none; border:none; color:#7fe0ff88; font-size:12px; padding:3px 6px; cursor:pointer; }
+  .kfChip .dup:hover { color:#7fe0ff; }
   .kfChip .del { background:none; border:none; color:#ff6b81; font-size:13px; padding:3px 7px; cursor:pointer; }
   .kfChip .kfEaseTag { display:flex; align-items:center; gap:3px; padding:2px 6px 2px 4px;
     border-left:1px solid #2a2a4a; color:#7fe0ff88; font-size:9px; letter-spacing:.3px; white-space:nowrap; }
   .kfChip .kfEaseTag svg { display:block; }
   #kfEmpty { font-size:11px; color:#555580; }
+  #kfTotalDuration { font-size:10px; color:#555580; letter-spacing:0; font-weight:normal; }
+  #kfMultiSelectCount { color:#7fe0ff; }
+  #kfMultiSelectBar button { font-size:10px; padding:4px 8px; }
+  .kfChip.multiChecked { border-color:#ff6b81; box-shadow:0 0 0 1px #ff6b8155 inset; }
+  .kfChip .kfCheckMark { width:14px; height:14px; border:1px solid #3a3a66; border-radius:3px;
+    display:flex; align-items:center; justify-content:center; font-size:10px; color:transparent;
+    background:#0f0f20; flex:0 0 auto; margin-right:2px; }
+  .kfChip.multiChecked .kfCheckMark { background:#ff6b81; border-color:#ff6b81; color:#0a0a12; }
+  .kfChip .kfLabelBtn { background:none; border:none; color:#6a6a9a; font-size:10px; padding:3px 5px;
+    cursor:pointer; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .kfChip .kfLabelBtn.hasLabel { color:#cfd6ff; border-left:1px solid #2a2a4a; padding-left:7px; }
+  .kfChip .kfLabelBtn:hover { color:#7fe0ff; }
 
   /* ---- 時間軸分頁：子區塊標題（分組用，不可收合）與可收合區塊（音樂／波形） ---- */
   .kfSectionHead { display:flex; align-items:center; gap:6px; font-size:11px; color:#6a6a9a;
@@ -166,22 +260,33 @@
   .libNameInput { flex:1 1 160px; min-width:100px; background:#0f0f20; border:1px solid #3a3a66;
     color:#e8e8f5; border-radius:6px; padding:7px 9px; font-size:12px; }
   .libNameInput:focus { outline:none; border-color:#7fe0ff; }
-  #poseLibList, #gestureLibList { gap:6px; max-height:28vh; overflow-y:auto; align-content:flex-start;
+  #poseLibList, #gestureLibList, #moveLibList { gap:6px; max-height:28vh; overflow-y:auto; align-content:flex-start;
     padding:2px 2px 4px; }
   .libChip { display:flex; align-items:center; gap:0; background:#16162a; border:1px solid #3a3a66;
     border-radius:6px; padding:2px 2px 2px 10px; font-size:11px; color:#cfd6ff; max-width:100%; }
   .libChip .sel { background:none; border:none; color:inherit; font-size:11px; padding:5px 6px;
-    cursor:pointer; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    cursor:pointer; max-width:170px; display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+  .libChip .selName { max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .libChip .selSub { font-size:9.5px; color:#6a6a9a; }
+  .libChip .ren { background:none; border:none; color:#9a9ac2; font-size:11px; padding:3px 5px; cursor:pointer; }
   .libChip .exp { background:none; border:none; color:#7fe0ff; font-size:12px; padding:3px 6px; cursor:pointer; }
   .libChip .del { background:none; border:none; color:#ff6b81; font-size:13px; padding:3px 7px; cursor:pointer; }
   .libEmpty { font-size:11px; color:#555580; }
+
+  /* ---- 招式庫 UI 優化：主要動作按鈕強調色、範圍箭頭、清單筆數徽章 ---- */
+  .moveLibPrimaryBtn { background:#173049; border-color:#3a7fb0; color:#bfe8ff; }
+  .moveLibPrimaryBtn:hover { background:#1f3f60; border-color:#4a9fd8; }
+  .moveLibRangeArrow { color:#555580; font-size:13px; }
+  .moveLibCountBadge { font-size:10px; color:#7fe0ff; background:#12233a; border:1px solid #234a68;
+    border-radius:10px; padding:1px 7px; margin-left:4px; }
 
   .easeRow { align-items:center; }
   .easePreview { display:flex; align-items:center; justify-content:center; background:#0f0f20;
     border:1px solid #26264a; border-radius:6px; padding:3px 5px; }
   .easePreview svg { display:block; }
   #kfBeatMsHint { font-size:10px; color:#555580; }
-  select#kfEasingSelect, select#kfBeatsSelect { min-width:118px; }
+  select#kfEasingSelect { min-width:118px; }
+  select#kfBeatsSelect { min-width:59px; } /* 拍數選項字數少，縮成 Easing 選單的一半寬 */
 
   /* ---- Easing 圖鑑分頁：32 種緩動函式卡片 ---- */
   .egGroup { margin-bottom:10px; }
@@ -284,16 +389,21 @@
   .jlNumInput:disabled { opacity:.35; }
   .jlAxisRow .jlSep { color:#555580; }
 
-  /* ---- 逐關節顯性回饋：生成後每個被重骰的關節各自一顆小👍/👎 ---- */
-  .jlJointFbRow { display:inline-flex; align-items:center; gap:4px; background:#0f0f20;
-    border:1px solid #26264a; border-radius:6px; padding:3px 6px; font-size:11px; color:#cfd6ff; }
-  .jlJointFbRow.jlJointFbDim { opacity:.4; }
-  .jlJointFbBtn { padding:2px 5px; font-size:11px; line-height:1; }
-  .jlJointFbBtn.active { background:#ff2f7e; border-color:#ff2f7e; color:#0a0a12; font-weight:bold; }
-  .jlJointFbBtn.active.dislike { background:#555580; border-color:#555580; color:#e8e8f5; }
   @media (max-width:640px){
     .fingerHandGrid { grid-template-columns:1fr; }
   }
+
+  /* ---- 自訂 Tooltip：取代所有原生 title 屬性的瀏覽器內建提示框（樣式不可控、延遲/位置不一致），
+     全站統一改用同一份深色系樣式，行為對齊介面其他元件（見下方 initGlobalTooltips）---- */
+  .customTooltip {
+    position:fixed; z-index:9999; max-width:320px; padding:8px 10px;
+    background:#14142af0; border:1px solid #3a3a66; border-radius:6px;
+    color:#cfd6ff; font-size:11px; line-height:1.6; letter-spacing:.2px;
+    box-shadow:0 4px 18px rgba(0,0,0,.55); pointer-events:none;
+    opacity:0; transform:translateY(4px); transition:opacity .12s ease, transform .12s ease;
+    white-space:pre-line;
+  }
+  .customTooltip.visible { opacity:1; transform:translateY(0); }
 </style>
 </head>
 <body>
@@ -301,6 +411,42 @@
 <div id="splitViewPanes"></div>
 <div id="loading">載入 Xbot 模型中…</div>
 <div id="title">TUTTING 3D SIMULATOR</div>
+
+<div id="selectedStatusBox">
+  <span>目前選取：</span>
+  <span id="selectedLabel">未選取</span>
+  <span id="selectedAngles"></span>
+</div>
+
+
+<!-- 顯示設定：身體/手部關節球、骨架、碰撞可視化——整合成專屬小面板，浮在畫面左上角、標題下方，
+     跟右上角的「分割視窗」預覽面板同樣的「疊在3D畫面上的浮動控制面板」定位方式，可收合避免擋畫面。 -->
+<div id="displayTogglesPanel">
+  <div id="displayTogglesHeader">
+    <span class="dtTitle">👁 顯示</span>
+    <button id="displayTogglesCollapseBtn" type="button" title="收合/展開">▾</button>
+  </div>
+  <div id="displayTogglesBody">
+    <label><input type="checkbox" id="showBodyJointsChk" checked> 身體關節球</label>
+    <label><input type="checkbox" id="showHandJointsChk" checked> 手部關節球</label>
+    <label><input type="checkbox" id="showSkeletonChk" checked> 骨架</label>
+    <label><input type="checkbox" id="handCollisionVizCb"> 碰撞膠囊體（除錯視覺化）
+      <span class="kfInfoIcon" title="把軀幹4段＋腿部4段共8段膠囊體（青色）、頭部球（青色）跟手掌的碰撞球（橘色）畫出來，方便邊看邊調半徑。跟「手部-身體碰撞回彈」開關是獨立的——只想看形狀、還不想讓手真的被推開時可以只開這個。半徑滑桿在「手腳IK」分頁的「進階/阻尼設定」裡。">ⓘ</span>
+    </label>
+    <label><input type="checkbox" id="showPerfPanelChk" checked> 效能面板（FPS／Draw Call）
+      <span class="kfInfoIcon" title="左下角顯示：「畫面 fps」＝實際呼叫 renderer.render() 的頻率（閒置降頻時會掉到約10fps）；「主循環 fps」＝ requestAnimationFrame 被排程呼叫的頻率（通常維持~60fps不受降頻影響，兩者的落差就是降頻機制省下來的量）；單幀耗時、Draw Calls、三角形數則來自 renderer.info，可用來抓效能瓶頸。">ⓘ</span>
+    </label>
+    <label><input type="checkbox" id="onionSkinChkDisplay"> 洋蔥皮預覽
+      <span class="kfInfoIcon" title="半透明顯示前一拍/後一拍；播放中則顯示目前過渡區段再前後一拍。只在「時間軸」分頁、且有選取拍點時才會實際顯示殘影，跟時間軸分頁裡的同名開關同步。">ⓘ</span>
+    </label>
+  </div>
+</div>
+
+<div id="perfPanel" data-tooltip="滑鼠移上來查看主循環(rAF)實際頻率">
+  <div class="perfRow" id="perfFps">🟢 -- fps ・ -- ms</div>
+  <div class="perfRow" id="perfDraw">DC -- ・ Tri --</div>
+</div>
+
 <div id="autosaveIndicator" style="position:absolute; top:78px; right:18px; font-size:10px; color:#555580; letter-spacing:.5px; opacity:0; transition:opacity .4s; text-align:right;"></div>
 
 <div id="ui" style="display:none">
@@ -313,26 +459,7 @@
   <div id="uiFloatResizeHandle" title="拖曳調整面板大小"></div>
 
   <div id="uiCommon">
-    <div class="row" id="historyCameraRow">
-      <button id="undoBtn" title="復原（Ctrl+Z）">↶ 復原</button>
-      <button id="redoBtn" title="重做（Ctrl+Shift+Z）">↷ 重做</button>
-      <label style="margin-left:6px;">鏡頭</label>
-      <select id="camSelect" title="切換鏡頭視角">
-        <option value="front">正面</option>
-        <option value="back">背面</option>
-        <option value="left">左側</option>
-        <option value="right">右側</option>
-        <option value="top">俯視</option>
-        <option value="iso">45°</option>
-        <option value="rhand">右手特寫</option>
-        <option value="lhand">左手特寫</option>
-      </select>
-    </div>
-
     <div id="selectedBar">
-      <span>目前選取：</span>
-      <span id="selectedLabel">未選取</span>
-      <span id="selectedAngles"></span>
       <button id="spaceBtn">座標：本地</button>
       <label id="snapLabel" style="margin-left:4px;">貼合角度</label>
       <select id="snapSelect">
@@ -348,16 +475,28 @@
       <span style="width:1px; align-self:stretch; background:#26264a; margin:0 4px;"></span>
       <button id="mirrorBtn" title="左右鏡像目前姿勢；若肢體有開啟IK，鏡像後下一幀可能被IK即時解算蓋回原本角度，建議先關閉該肢體IK">🪞 鏡像姿勢</button>
       <button id="symmetrizeBtn" title="以右手/右腳目前角度為準，把左手/左腳套成鏡射後的對稱姿勢（右側不變）；若肢體有開啟IK，套用後下一幀可能被IK即時解算蓋回原本角度，建議先關閉該肢體IK">⚖ 對稱姿勢</button>
+      <span style="width:1px; align-self:stretch; background:#26264a; margin:0 4px;"></span>
+      <button id="undoBtn" title="復原（Ctrl+Z）">↶ 復原</button>
+      <button id="redoBtn" title="重做（Ctrl+Shift+Z）">↷ 重做</button>
+      <label style="margin-left:2px;">鏡頭</label>
+      <select id="camSelect" title="切換鏡頭視角">
+        <option value="front">正面</option>
+        <option value="back">背面</option>
+        <option value="left">左側</option>
+        <option value="right">右側</option>
+        <option value="top">俯視</option>
+        <option value="iso">45°</option>
+        <option value="rhand">右手特寫</option>
+        <option value="lhand">左手特寫</option>
+      </select>
       <button id="resetBtn">重置全部</button>
-      <label style="margin-left:10px;"><input type="checkbox" id="showBodyJointsChk" checked> 身體關節球</label>
-      <label><input type="checkbox" id="showHandJointsChk" checked> 手部關節球</label>
-      <label><input type="checkbox" id="showSkeletonChk" checked> 骨架</label>
     </div>
   </div>
 
   <div id="uiTabBar">
     <button class="tabBtn active" data-tab="poseLib">動作姿勢庫</button>
     <button class="tabBtn" data-tab="gestureLib">掌指手勢庫</button>
+    <button class="tabBtn" data-tab="moveLib">招式庫</button>
     <button class="tabBtn" data-tab="json">JSON</button>
     <button class="tabBtn" data-tab="keyframe">時間軸</button>
     <button class="tabBtn" data-tab="groove">節奏與律動</button>
@@ -408,6 +547,85 @@
       </div>
     </div>
 
+    <div class="tabPanel" data-tab="moveLib" id="tabMoveLib">
+      <div class="panelTitle" style="display:flex; align-items:center; gap:6px;">招式庫
+        <span class="kfInfoIcon" title="一個「招式」＝時間軸上一小段連續拍點（一組動作組合）。先在「拍點」分頁把幾拍動作排好，再回這裡指定範圍存成招式；之後可以插入到任何一份編舞裡重複使用，方便把小招串成一整支舞。">ⓘ</span>
+      </div>
+
+      <div class="kfSectionHead">🎯 指定拍點範圍存成招式</div>
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#cfd6ff;">
+          起始拍 F<input type="number" id="moveLibStartInput" min="1" value="1" style="width:52px;">
+        </label>
+        <button id="moveLibUseCurAsStartBtn" title="用「拍點」分頁目前選取的拍點當起點">↙ 用目前選取</button>
+        <span class="moveLibRangeArrow">→</span>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#cfd6ff;">
+          結束拍 F<input type="number" id="moveLibEndInput" min="1" value="1" style="width:52px;">
+        </label>
+        <button id="moveLibUseCurAsEndBtn" title="用「拍點」分頁目前選取的拍點當終點">↙ 用目前選取</button>
+        <span id="moveLibRangeHint" style="font-size:11px;color:#6a6a9a;"></span>
+      </div>
+      <div class="row">
+        <input type="text" id="moveLibNameInput" class="libNameInput" placeholder="輸入招式名稱…" maxlength="40">
+        <button id="moveLibSaveBtn" class="moveLibPrimaryBtn">💾 儲存所選範圍為招式</button>
+      </div>
+
+      <div class="kfSectionHead">📚 招式清單<span id="moveLibCount" class="moveLibCountBadge">0</span></div>
+      <div class="row">
+        <span id="libStorageUsageHint" style="font-size:10.5px; color:#6a6a9a;" title="姿勢庫／手勢庫／招式庫共用同一份瀏覽器儲存空間，這裡顯示三者加總的用量"></span>
+      </div>
+      <div class="row">
+        <button id="moveLibExportAllBtn">⬇ 匯出全部</button>
+        <button id="moveLibImportAllBtn">⬆ 匯入全部</button>
+        <button id="moveLibImportOneBtn">⬆ 匯入單一招式</button>
+        <input type="file" id="moveLibImportAllFile" accept="application/json,.json" style="display:none">
+        <input type="file" id="moveLibImportOneFile" accept="application/json,.json" style="display:none">
+      </div>
+      <div class="row">
+        <input type="text" id="moveLibSearchInput" class="libNameInput" style="flex:0 1 200px;" placeholder="🔍 搜尋招式名稱…">
+      </div>
+      <div class="row" id="moveLibList">
+        <span class="libEmpty" id="moveLibEmpty">尚未儲存任何招式——在上方指定拍點範圍、輸入名稱後按「儲存所選範圍為招式」</span>
+      </div>
+
+      <details class="kfCollapsible">
+        <summary>🤖 自動生成招式
+          <span class="kfInfoIcon" title="沿用「關節限制」分頁設定的角度範圍與 Isolation 分組，連續隨機生成幾個姿勢串成一個招式，直接存進招式庫（不影響目前時間軸）。需先到「關節限制」分頁至少設定一個關節的角度限制範圍。">ⓘ</span>
+        </summary>
+        <div class="kfCollapsibleBody">
+          <div class="row">
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#cfd6ff;">
+              拍數：<input type="number" id="moveAutoGenFrameCountInput" min="2" max="12" value="4" style="width:52px;"> 拍
+            </label>
+            <input type="text" id="moveAutoGenNameInput" class="libNameInput" placeholder="招式名稱（留空自動命名）…" maxlength="40">
+          </div>
+          <div class="row">
+            <button id="moveAutoGenBtn" class="moveLibPrimaryBtn" title="需先到「關節限制」分頁至少設定一個關節的角度限制範圍">🤖 自動生成招式並存入招式庫</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="kfCollapsible">
+        <summary>🎲 隨機接龍生成排舞
+          <span class="kfInfoIcon" title="招式庫累積到一定數量後，可以隨機抽幾個招式接龍成一份排舞。">ⓘ</span>
+        </summary>
+        <div class="kfCollapsibleBody">
+          <div class="row">
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#cfd6ff;">
+              生成長度：<input type="number" id="moveGenCountInput" min="1" max="50" value="8" style="width:52px;"> 個招式
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#cfd6ff;">
+              <input type="checkbox" id="moveGenAllowRepeatChk"> 允許連續重複同一招式
+            </label>
+          </div>
+          <div class="row">
+            <button id="moveGenAppendBtn" class="moveLibPrimaryBtn" title="隨機抽招式，接在目前時間軸最尾端">🎲 生成排舞（接在尾端）</button>
+            <button id="moveGenReplaceBtn" title="清空目前時間軸，改用隨機招式生成一份新的">🎲 生成排舞（取代整份）</button>
+          </div>
+        </div>
+      </details>
+    </div>
+
     <div class="tabPanel" data-tab="json" id="tabJson">
       <div class="panelTitle">姿勢 JSON（可直接編輯後按「套用」，或按「複製」貼到別處保存）</div>
       <textarea id="jsonArea" spellcheck="false"></textarea>
@@ -423,50 +641,6 @@
     </div>
 
     <div class="tabPanel" data-tab="keyframe" id="tabKeyframe">
-      <div class="panelTitle" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-        <span style="display:inline-flex; align-items:center; gap:6px;">Keyframe 拍點時間軸
-          <span class="kfInfoIcon" title="用 FK 擺好姿勢後按「新增拍點」記錄一拍，Play 時以四元數 Slerp 平滑過渡">ⓘ</span>
-        </span>
-        <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#6a6a9a; letter-spacing:1px;">⏱ 轉場預設（Easing／拍數）
-          <span class="kfInfoIcon" title="未選取拍點時，以下設定作為「下一個新增拍點」的預設值；選取某個拍點時，以下設定即時套用到該拍點的轉場（影響它跳到下一拍的過渡方式）。BPM 已搬到「節奏與律動」分頁，此處拍數換算的毫秒數仍會跟著那邊的 BPM 走。">ⓘ</span>
-        </span>
-        <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#6a6a9a; letter-spacing:1px;">👻 視覺輔助
-          <span class="kfInfoIcon" title="半透明顯示前一拍/後一拍；播放中則顯示目前過渡區段再前後一拍">ⓘ</span>
-        </span>
-      </div>
-
-      <div class="row">
-        <button id="kfPlayBtn">▶ 播放拍點</button>
-        <label><input type="checkbox" id="kfLoopChk"> 循環播放</label>
-        <button id="kfAddBtn">+ 新增拍點</button>
-        <button id="kfUpdateBtn">更新選取拍點</button>
-        <button id="kfDeleteBtn">刪除選取拍點</button>
-        <button id="kfClearBtn">清空全部</button>
-      </div>
-
-      <div class="row easeRow">
-        <label>轉場 Easing（32種）</label>
-        <select id="kfEasingSelect"></select>
-        <div class="easePreview" id="kfEasingPreview"></div>
-        <label style="margin-left:6px;">拍數</label>
-        <select id="kfBeatsSelect">
-          <option value="0.25">1/4 拍</option>
-          <option value="0.5">1/2 拍</option>
-          <option value="1" selected>1 拍</option>
-          <option value="1.5">1.5 拍</option>
-          <option value="2">2 拍</option>
-          <option value="3">3 拍</option>
-          <option value="4">4 拍</option>
-        </select>
-        <span id="kfBeatMsHint"></span>
-        <span style="width:1px; align-self:stretch; background:#26264a; margin:0 2px;"></span>
-        <label><input type="checkbox" id="onionSkinChk"> 洋蔥皮預覽</label>
-        <span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:#9a9ac2;">
-          <span style="width:10px; height:10px; border-radius:50%; background:#33ccff; display:inline-block;"></span>上一拍
-          <span style="width:10px; height:10px; border-radius:50%; background:#ff44cc; display:inline-block; margin-left:8px;"></span>下一拍
-        </span>
-      </div>
-
       <div class="kfSectionHead">🎵📁 音樂與編舞檔案
         <span class="kfInfoIcon" title="匯出/匯入編舞包含全部拍點、軌跡控制點、BPM 等完整資料（會覆蓋目前時間軸）；音樂只存在這次瀏覽階段，不會存進編舞檔案，重新整理頁面或匯入編舞後都需要重新匯入音樂">ⓘ</span>
       </div>
@@ -511,8 +685,52 @@
         </div>
       </details>
 
+      <div class="panelTitle" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <span style="display:inline-flex; align-items:center; gap:6px;">Keyframe 拍點時間軸
+          <span class="kfInfoIcon" title="用 FK 擺好姿勢後按「新增拍點」記錄一拍，Play 時以四元數 Slerp 平滑過渡">ⓘ</span>
+        </span>
+        <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#6a6a9a; letter-spacing:1px;">⏱ 轉場預設（Easing／拍數）
+          <span class="kfInfoIcon" title="未選取拍點時，以下設定作為「下一個新增拍點」的預設值；選取某個拍點時，以下設定即時套用到該拍點的轉場（影響它跳到下一拍的過渡方式）。BPM 已搬到「節奏與律動」分頁，此處拍數換算的毫秒數仍會跟著那邊的 BPM 走。">ⓘ</span>
+        </span>
+      </div>
 
-      <div class="kfSectionHead">📋 拍點清單</div>
+      <div class="row easeRow">
+        <button id="kfPlayBtn">▶ 播放拍點</button>
+        <button id="kfLoopBtn" class="iconToggleBtn" type="button" data-tooltip="循環播放：拍點播完自動從頭再來一次">🔁</button>
+        <button id="kfAddBtn" title="若目前有選取某個拍點，會插入在它後面；沒有選取則加到最尾端">+ 新增拍點</button>
+        <span class="kfInfoIcon" title="拖曳排序：直接拖曳拍點改變順序（播放中無法拖曳）。⧉ 複製：插入一份一樣的拍點在後面。鍵盤快捷鍵（時間軸分頁、非播放中）：←/→切換選取拍點、Delete/Backspace刪除選取中的拍點、Ctrl(⌘)+D複製選取中的拍點。">ⓘ</span>
+        <button id="kfUpdateBtn">更新選取拍點</button>
+        <span style="width:1px; align-self:stretch; background:#26264a; margin:0 2px;"></span>
+        <label data-tooltip="轉場 Easing，共 32 種緩動函式可選">Easing</label>
+        <select id="kfEasingSelect"></select>
+        <div class="easePreview" id="kfEasingPreview"></div>
+        <label style="margin-left:6px;">拍數</label>
+        <select id="kfBeatsSelect">
+          <option value="0.25">1/4 拍</option>
+          <option value="0.5">1/2 拍</option>
+          <option value="1" selected>1 拍</option>
+          <option value="1.5">1.5 拍</option>
+          <option value="2">2 拍</option>
+          <option value="3">3 拍</option>
+          <option value="4">4 拍</option>
+        </select>
+        <span id="kfBeatMsHint"></span>
+      </div>
+
+      <div class="kfSectionHead" style="justify-content:space-between; flex-wrap:wrap;">
+        <span style="display:inline-flex; align-items:center; gap:8px;">📋 拍點清單
+          <span id="kfTotalDuration"></span>
+        </span>
+        <span style="display:inline-flex; align-items:center; gap:6px;">
+          <button id="kfMultiSelectBtn" class="iconToggleBtn" type="button" data-tooltip="多選模式：勾選多個拍點後可一次刪除">☑</button>
+          <span id="kfMultiSelectBar" style="display:none; align-items:center; gap:6px; font-size:11px; color:#9a9ac2;">
+            <span id="kfMultiSelectCount">已選 0 個</span>
+            <button id="kfMultiSelectAllBtn">全選</button>
+            <button id="kfMultiSelectNoneBtn">取消全選</button>
+            <button id="kfMultiSelectDeleteBtn" style="color:#ff6b81; border-color:#7a2a3a;">刪除已勾選</button>
+          </span>
+        </span>
+      </div>
       <div class="row" id="kfList">
         <span id="kfEmpty">尚未新增任何拍點——先用關節控制環擺出第一個姿勢，再按「+ 新增拍點」</span>
       </div>
@@ -688,6 +906,67 @@
             <span class="kfInfoIcon" title="手臂 IK 求解前，讓肩膀先小幅偏向目標方向（限制在真人鎖骨可動範圍內，約20°），讓手伸遠時有自然聳肩/前伸感。關掉則肩膀完全不動，純兩節IK手感。">ⓘ</span>
           </div>
           <div class="row">
+            <label><input type="checkbox" id="handCollisionCb"> 啟用手部-身體碰撞回彈（軀幹/腿/頭，Beta）</label>
+            <span class="kfInfoIcon" title="偵測手掌是否插進軀幹（Hips~Neck）、大腿/小腿、或頭部（幾段膠囊體+一顆球近似），穿模時自動彎手肘把手推出去。只作用在沒開「手臂IK」、沒被滑鼠拖曳的手；已開IK的手代表你明確指定了位置，不會被這裡覆蓋。下面可以直接調整每一段膠囊體/頭部球的半徑。">ⓘ</span>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="handHandCollisionCb"> 啟用雙手互碰回彈（Beta）</label>
+            <span class="kfInfoIcon" title="偵測左右手掌球是否互相穿模，穿模時自動彎手肘把兩手推開。若某隻手已開IK或正被拖曳，那隻手視為鎖定不會被移動——只有另一隻手會退開；兩手都鎖定時完全不介入，尊重使用者刻意疊手的姿勢。半徑沿用下面的「手掌球半徑」。">ⓘ</span>
+          </div>
+          <div class="row" style="flex-wrap:wrap; gap:10px 16px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">骨盆-脊椎下</label>
+              <input type="range" id="hcRadiusSlider_0" min="0.02" max="1" step="0.005" value="0.15">
+              <span id="hcRadiusVal_0">0.150</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">脊椎下-脊椎中</label>
+              <input type="range" id="hcRadiusSlider_1" min="0.02" max="1" step="0.005" value="0.14">
+              <span id="hcRadiusVal_1">0.140</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">脊椎中-胸口</label>
+              <input type="range" id="hcRadiusSlider_2" min="0.02" max="1" step="0.005" value="0.16">
+              <span id="hcRadiusVal_2">0.160</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">胸口-頸部</label>
+              <input type="range" id="hcRadiusSlider_3" min="0.02" max="1" step="0.005" value="0.12">
+              <span id="hcRadiusVal_3">0.120</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">右大腿</label>
+              <input type="range" id="hcRadiusSlider_4" min="0.02" max="1" step="0.005" value="0.10">
+              <span id="hcRadiusVal_4">0.100</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">右小腿</label>
+              <input type="range" id="hcRadiusSlider_5" min="0.02" max="1" step="0.005" value="0.07">
+              <span id="hcRadiusVal_5">0.070</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">左大腿</label>
+              <input type="range" id="hcRadiusSlider_6" min="0.02" max="1" step="0.005" value="0.10">
+              <span id="hcRadiusVal_6">0.100</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">左小腿</label>
+              <input type="range" id="hcRadiusSlider_7" min="0.02" max="1" step="0.005" value="0.07">
+              <span id="hcRadiusVal_7">0.070</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">頭部</label>
+              <input type="range" id="hcRadiusSlider_8" min="0.02" max="1" step="0.005" value="0.12">
+              <span id="hcRadiusVal_8">0.120</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="min-width:110px;">手掌球半徑</label>
+              <input type="range" id="hcHandRadiusSlider" min="0.02" max="0.15" step="0.005" value="0.055">
+              <span id="hcHandRadiusVal">0.055</span>
+            </div>
+            <button id="hcRadiusResetBtn" type="button">恢復預設值</button>
+          </div>
+          <div class="row">
             <label style="min-width:150px;">身體跟隨阻尼</label>
             <input type="range" id="rootFollowDampSlider" min="0.05" max="1" step="0.01" value="0.3">
             <span id="rootFollowDampVal">0.30</span>
@@ -722,7 +1001,9 @@
 
     <div class="tabPanel" data-tab="fingers" id="tabFingers">
       <div class="panelTitle" style="display:flex; align-items:center; gap:6px;">手指 FK／IK — 按鈕選指節，旋轉環微調（根／中／末＝第1／2／3節，hover 看全名）；列尾「IK」可切換為拖曳指尖青色球自動彎曲。
-        <span class="kfInfoIcon" title="手指彎曲方向的局部軸是合理猜測、未經實機渲染驗證；若旋轉方向不是彎曲方向請自行試其他軸向，手指IK用CCD動態算軸不受此限制影響">⚠️</span></div>
+        <span class="kfInfoIcon" title="手指彎曲方向的局部軸是合理猜測、未經實機渲染驗證；若旋轉方向不是彎曲方向請自行試其他軸向，手指IK用CCD動態算軸不受此限制影響">⚠️</span>
+        <button id="fingerFloatBtn" type="button" style="margin-left:auto; font-size:10px; padding:4px 8px;">🗗 浮動視窗</button>
+      </div>
       <div class="fingerHandGrid">
         <div class="fingerHandCard" id="fingerCard_r">
           <div class="fingerHandTitle">右手</div>
@@ -750,6 +1031,30 @@
         </select>
         <button id="trajAddPointBtn">+ 新增控制點</button>
         <button id="trajClearPointsBtn">清除控制點</button>
+        <label id="trajClosedLabel"><input type="checkbox" id="trajClosedChk"> 封閉路徑（首尾相連，≥3點才生效）</label>
+      </div>
+      <div class="row" id="trajShapeGenRow" style="border-top:1px dashed #33335a; padding-top:8px; margin-top:2px;">
+        <label>形狀產生器</label>
+        <select id="trajShapeTypeSelect">
+          <option value="circle">圓形</option>
+          <option value="ellipse">橢圓形</option>
+          <option value="polygon">正多邊形</option>
+          <option value="star">星形</option>
+        </select>
+        <label id="trajShapeSidesLabel">邊數</label>
+        <input type="number" id="trajShapeSidesInput" min="3" max="12" step="1" value="5" style="width:48px;">
+        <label id="trajShapeRadiusLabel">半徑(公尺)</label>
+        <input type="number" id="trajShapeRadiusInput" min="0.02" max="1" step="0.01" value="0.15" style="width:56px;">
+        <label id="trajShapeRadiusYLabel" style="display:none;">短半徑(公尺)</label>
+        <input type="number" id="trajShapeRadiusYInput" min="0.02" max="1" step="0.01" value="0.08" style="width:56px; display:none;">
+        <label id="trajShapeInnerRatioLabel" style="display:none;">內凹比例</label>
+        <input type="number" id="trajShapeInnerRatioInput" min="0.1" max="0.9" step="0.05" value="0.5" style="width:48px; display:none;">
+        <select id="trajShapePlaneSelect" title="決定形狀畫在哪個平面上">
+          <option value="xz">水平面（俯視為圓/多邊形，像轉呼拉圈）</option>
+          <option value="xy">垂直面·朝前（面對鏡頭畫圈，像畫時鐘）</option>
+          <option value="yz">垂直面·側向（左右手側邊畫圈）</option>
+        </select>
+        <button id="trajGenShapeBtn">產生形狀（取代目前控制點）</button>
       </div>
       <div class="row" id="trajPointList">
         <span id="trajPointEmpty">尚未新增控制點——先拖橘色目標球到位，再按「+ 新增控制點」</span>
@@ -761,7 +1066,7 @@
         <button id="trajGenerateBtn">生成拍點（依序寫入時間軸）</button>
       </div>
       <div class="panelTitle" style="margin-top:8px; display:flex; align-items:center; gap:6px;">點選清單中的 Pxx 可選取控制點並用控制環拖曳調整位置；取樣拍點數只影響編輯階段的疏密，不影響播放平滑度。
-        <span class="kfInfoIcon" title="極端大幅彎曲的曲線，彎曲極向球方向播放中途可能翻面，若發生請調高取樣數或改用折線模式；另外一條軌跡只對應一個肢體，播放時若角色曾因搆不到而平移，即時IK不會重現該平移，只會讓手臂伸到最長（已知限制）">⚠️</span></div>
+        <span class="kfInfoIcon" title="極端大幅彎曲的曲線，彎曲極向球方向播放中途可能翻面，若發生請調高取樣數或改用折線模式（封閉曲線繞一整圈更容易觸發，建議先試折線模式）；另外一條軌跡只對應一個肢體，播放時若角色曾因搆不到而平移，即時IK不會重現該平移，只會讓手臂伸到最長（已知限制）">⚠️</span></div>
     </div>
 
     <div class="tabPanel" data-tab="overview" id="tabOverview">
@@ -800,11 +1105,6 @@
       </div>
       <div class="row">
         <span id="jlIsolationStatus" style="font-size:11px;color:#9a9ac2;"></span>
-        <span id="jlFeedbackButtons"></span>
-      </div>
-      <div class="row" id="jlJointFeedbackWrap" style="display:none; flex-direction:column; align-items:flex-start; gap:4px;">
-        <div style="font-size:11px;color:#6a6a9a;">個別關節評分（只影響這個關節自己的機率）：</div>
-        <div id="jlJointFeedbackList" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
       </div>
       <div id="jlAdvancedSection" style="display:none;">
         <div class="row">
@@ -821,14 +1121,6 @@
           <span>~</span>
           <input type="number" id="jlIsolationMaxInput" value="2" min="1" step="1" style="width:40px;">
           <span>組</span>
-        </div>
-        <div class="row">
-          <label><input type="checkbox" id="jlFeedbackEnabledChk"> 啟用顯性回饋（生成後可按👍/👎）</label>
-          <button id="jlResetLearningBtn">重置學習</button>
-        </div>
-        <div class="row" id="jlLearningLogWrap" style="display:none;">
-          <div style="font-size:11px;color:#6a6a9a;">最近學習調整：</div>
-          <div id="jlLearningLog" style="font-size:11px;color:#9a9ac2;display:flex;flex-direction:column;gap:2px;"></div>
         </div>
       </div>
       <div id="jointLimitGroups"></div>
@@ -862,6 +1154,99 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
+
+// ======================================================================
+// 全站自訂 Tooltip：取代所有原生 title 屬性的瀏覽器內建提示框。
+// 用 document 層級事件委派攔截 mouseover/focusin，不管是寫死在 HTML 裡的
+// title="..."，還是程式後續動態賦值（例如 el.title = "..."）產生的，
+// 都在真正要顯示的那一刻統一「搬」成 data-tooltip 並清空原生 title
+// （避免自訂的跟瀏覽器原生的兩個提示框同時疊出來），統一走同一套深色系樣式，
+// 不需要逐一改寫程式裡每一處指定提示文字的地方。
+// ======================================================================
+function initGlobalTooltips(){
+  let tooltipEl = null;
+  let showTimer = null;
+  let activeEl = null;
+
+  function ensureTooltipEl(){
+    if (!tooltipEl){
+      tooltipEl = document.createElement("div");
+      tooltipEl.className = "customTooltip";
+      document.body.appendChild(tooltipEl);
+    }
+    return tooltipEl;
+  }
+
+  function positionTooltip(target){
+    const el = ensureTooltipEl();
+    const rect = target.getBoundingClientRect();
+    const margin = 8;
+    const tw = el.offsetWidth, th = el.offsetHeight;
+    let left = rect.left + rect.width/2 - tw/2;
+    left = Math.max(margin, Math.min(left, innerWidth - tw - margin));
+    let top = rect.top - th - margin;
+    if (top < margin) top = rect.bottom + margin; // 上方放不下（元素太靠近視窗頂端）就改放下方
+    el.style.left = left.toFixed(0) + "px";
+    el.style.top = top.toFixed(0) + "px";
+  }
+
+  function showTooltip(target){
+    const text = target.getAttribute("data-tooltip");
+    if (!text) return;
+    const el = ensureTooltipEl();
+    el.textContent = text;
+    el.classList.add("visible");
+    positionTooltip(target);
+  }
+
+  function hideTooltip(){
+    if (tooltipEl) tooltipEl.classList.remove("visible");
+    activeEl = null;
+  }
+
+  // 把元素身上的原生 title 屬性搬到 data-tooltip、清空 title，讓瀏覽器不再顯示原生提示框。
+  function migrateTitle(el){
+    if (el.hasAttribute("title")){
+      const t = el.getAttribute("title");
+      if (t) el.setAttribute("data-tooltip", t);
+      el.removeAttribute("title");
+    }
+  }
+
+  function findTooltipTarget(node){
+    return (node && node.nodeType === 1) ? node.closest("[title],[data-tooltip]") : null;
+  }
+
+  document.addEventListener("mouseover", (e) => {
+    const target = findTooltipTarget(e.target);
+    if (!target) return;
+    migrateTitle(target);
+    if (target === activeEl) return;
+    activeEl = target;
+    clearTimeout(showTimer);
+    showTimer = setTimeout(() => { if (activeEl === target) showTooltip(target); }, 150);
+  });
+  document.addEventListener("mouseout", (e) => {
+    const target = findTooltipTarget(e.target);
+    if (!target) return;
+    if (e.relatedTarget && target.contains(e.relatedTarget)) return; // 還在同一個提示元素內部移動，不算離開
+    clearTimeout(showTimer);
+    hideTooltip();
+  });
+  document.addEventListener("focusin", (e) => {
+    const target = findTooltipTarget(e.target);
+    if (!target) return;
+    migrateTitle(target);
+    activeEl = target;
+    showTooltip(target);
+  });
+  document.addEventListener("focusout", (e) => {
+    if (findTooltipTarget(e.target)) hideTooltip();
+  });
+  document.addEventListener("scroll", hideTooltip, true);
+  window.addEventListener("resize", hideTooltip);
+}
+initGlobalTooltips();
 
 const MODEL_URL = "https://threejs.org/examples/models/gltf/Xbot.glb";
 
@@ -1007,285 +1392,9 @@ function getJointWeight(key){
   return (typeof w === "number" && w >= 0 && w <= 100) ? w : 100;
 }
 
-// ==== 顯性回饋學習（👍/👎）====
-// 使用者按「動作生成」之後主動按讚/倒讚，用來調整之後「哪些分組/關節比較常/比較少
-// 被生成到」的機率。學習係數跟使用者手動設定的基準值（isolationSettings）完全分開存，
-// 生成時用「基準值 × 學習係數」當作實際套用的有效值——使用者手動改的數字永遠不會被
-// 學習偷偷洗掉，「重置學習」也只清係數、不動基準設定。
-const LEARNING_STORAGE_KEY = "tuttingLearningState";
-const LEARNING_FEEDBACK_STEP = 0.08; // 每次👍/👎的乘法調整幅度
-const LEARNING_FACTOR_MIN = 0.3, LEARNING_FACTOR_MAX = 3.0; // 係數上下限，避免暴衝或歸零
-
-let learningState = {
-  feedbackEnabled: false,
-  learnedGroupFactor: {}, // groupId -> 係數，預設1.0
-  learnedJointFactor: {}, // jointKey -> 係數，預設1.0
-  learnedAngleFactor: {}, // jointKey -> axis('x'/'y'/'z') -> 角度值字串 -> 係數，預設1.0（第三層：角度層級學習）
-  lastGenerationRecord: null, // { timestamp, pickedGroupIds, finalKeys, feedbackGiven, jointFeedback, jointRolledAngles }
-  learningLog: []         // 最近幾筆調整紀錄，只給人看，不影響邏輯
-};
-loadLearningState();
-
-function loadLearningState(){
-  try {
-    const raw = localStorage.getItem(LEARNING_STORAGE_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (typeof saved.feedbackEnabled === "boolean") learningState.feedbackEnabled = saved.feedbackEnabled;
-    if (saved.learnedGroupFactor && typeof saved.learnedGroupFactor === "object") Object.assign(learningState.learnedGroupFactor, saved.learnedGroupFactor);
-    if (saved.learnedJointFactor && typeof saved.learnedJointFactor === "object") Object.assign(learningState.learnedJointFactor, saved.learnedJointFactor);
-    if (saved.learnedAngleFactor && typeof saved.learnedAngleFactor === "object") Object.assign(learningState.learnedAngleFactor, saved.learnedAngleFactor);
-    if (Array.isArray(saved.learningLog)) learningState.learningLog = saved.learningLog.slice(0, 30);
-    // lastGenerationRecord 是暫時性運算狀態，重新整理頁面後不用還原，故意不讀回來
-  } catch (e){ console.warn("學習狀態讀取失敗:", e); }
-}
-
-function saveLearningState(){
-  try {
-    // lastGenerationRecord 不存檔（本來就是暫時性的，且可能含很快就過期的timestamp）
-    const { feedbackEnabled, learnedGroupFactor, learnedJointFactor, learnedAngleFactor, learningLog } = learningState;
-    localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify({ feedbackEnabled, learnedGroupFactor, learnedJointFactor, learnedAngleFactor, learningLog }));
-  } catch (e){ console.warn("學習狀態儲存失敗:", e); }
-}
-
-function getLearnedGroupFactor(groupId){
-  const f = learningState.learnedGroupFactor[groupId];
-  return (typeof f === "number" && f > 0) ? f : 1.0;
-}
-function getLearnedJointFactor(key){
-  const f = learningState.learnedJointFactor[key];
-  return (typeof f === "number" && f > 0) ? f : 1.0;
-}
-
-// ---- 角度層級學習（第三層）----
-// 存放粒度細到「某關節、某一軸、某個具體角度值」的學習係數，跟分組/關節層級係數
-// 完全平行、互不干擾——三層係數各自獨立疊加影響的對象不同（分組=挑哪組、關節=這關節
-// 動不動、角度=動的話骰到哪個刻度），彼此不會互相覆蓋。
-// 角度值用「四捨五入到小數第3位」的字串當key，避免浮點數誤差讓同一個角度對不到同一筆係數；
-// 格距若事後被使用者改掉，舊的角度係數字串可能對不上新格點，屬於已知且可接受的限制。
-function angleValueKey(v){
-  return String(Math.round(v * 1000) / 1000);
-}
-function getLearnedAngleFactor(key, axis, value){
-  const axisMap = learningState.learnedAngleFactor[key];
-  const valMap = axisMap && axisMap[axis];
-  const f = valMap && valMap[angleValueKey(value)];
-  return (typeof f === "number" && f > 0) ? f : 1.0;
-}
-function setLearnedAngleFactor(key, axis, value, newFactor){
-  if (!learningState.learnedAngleFactor[key]) learningState.learnedAngleFactor[key] = {};
-  if (!learningState.learnedAngleFactor[key][axis]) learningState.learnedAngleFactor[key][axis] = {};
-  learningState.learnedAngleFactor[key][axis][angleValueKey(value)] = newFactor;
-}
-// 加權抽樣：從候選角度值清單裡，依每個值目前的學習係數當權重抽出一個。
-// 權重總和為0、NaN、或非有限值時（理論上不該發生，但避免除以0讓生成整個掛掉）一律退回均勻隨機。
-function weightedPickAngle(key, axis, candidates){
-  if (candidates.length === 1) return candidates[0];
-  const weights = candidates.map(v => getLearnedAngleFactor(key, axis, v));
-  const total = weights.reduce((s, w) => s + w, 0);
-  if (!isFinite(total) || total <= 0){
-    return candidates[Math.floor(Math.random() * candidates.length)];
-  }
-  let r = Math.random() * total;
-  for (let i = 0; i < candidates.length; i++){
-    r -= weights[i];
-    if (r <= 0) return candidates[i];
-  }
-  return candidates[candidates.length - 1];
-}
-// 生成時真正用的「有效關節機率」＝基準機率 × 學習係數，clamp回0~100。
-function getEffectiveJointWeight(key){
-  return clampNum(getJointWeight(key) * getLearnedJointFactor(key), 0, 100);
-}
-
-// 追蹤每個關節「最後一次被使用者手動拖曳關節球修改」的時間戳，用來判斷生成後
-// 使用者是否已經手動改過這個關節——改過的話，這個關節不算進這次的回饋範圍。
-let jointLastManualEditTime = {};
-function wasManuallyEditedSince(key, timestamp){
-  return (jointLastManualEditTime[key] || 0) > timestamp;
-}
-
-// 按下整體 👍(liked=true)或👎(liked=false)時呼叫——只影響「這次抽中的分組」被抽到的機率，
-// 不動個別關節係數（個別關節請用下面的 submitJointFeedback，兩者互相獨立、可以都評或只評一種）。
-function submitExplicitFeedback(liked){
-  const rec = learningState.lastGenerationRecord;
-  if (!rec || rec.feedbackGiven) return;
-
-  const sign = liked ? 1 : -1;
-  for (const groupId of rec.pickedGroupIds){
-    const cur = getLearnedGroupFactor(groupId);
-    learningState.learnedGroupFactor[groupId] = clampNum(cur * (1 + sign * LEARNING_FEEDBACK_STEP), LEARNING_FACTOR_MIN, LEARNING_FACTOR_MAX);
-  }
-
-  const groupLabels = rec.pickedGroupIds.map(id => OVERVIEW_GROUPS.find(g => g.id === id)?.label || id);
-  learningState.learningLog.unshift({
-    time: Date.now(),
-    rating: liked ? "like" : "dislike",
-    scope: "group",
-    groupLabels
-  });
-  if (learningState.learningLog.length > 30) learningState.learningLog.length = 30;
-
-  rec.feedbackGiven = true;
-  saveLearningState();
-  renderFeedbackButtons();
-  renderLearningLog();
-}
-
-// 針對「單一關節」按👍/👎：只調整這個關節自己的學習係數。每個關節在同一次生成裡最多評一次，
-// 評過會停用按鈕；生成後如果使用者又手動拖曳改過這個關節，這個關節就直接從清單裡標記為
-// 「不計入」（跟整體評分排除手動改過關節的邏輯一致），避免把使用者自己的修正誤判成負面回饋。
-function submitJointFeedback(key, liked){
-  const rec = learningState.lastGenerationRecord;
-  if (!rec || rec.jointFeedback[key]) return;
-  if (wasManuallyEditedSince(key, rec.timestamp)) return;
-
-  const sign = liked ? 1 : -1;
-  const cur = getLearnedJointFactor(key);
-  learningState.learnedJointFactor[key] = clampNum(cur * (1 + sign * LEARNING_FEEDBACK_STEP), LEARNING_FACTOR_MIN, LEARNING_FACTOR_MAX);
-
-  // 角度層級：同一按讚/倒讚動作，額外對「這次真的有骰到」的每一軸角度值各自做同方向、
-  // 同步幅的調整；沒被骰到（未啟用或本來就沒重骰）的軸維持 undefined，完全不受影響。
-  const rolled = (rec.jointRolledAngles && rec.jointRolledAngles[key]) || {};
-  const angleAdjustments = {}; // 只放這次真的有調整到的軸，供學習紀錄顯示用
-  for (const axis of ["x", "y", "z"]){
-    const v = rolled[axis];
-    if (v === null || v === undefined) continue; // 這一軸這次沒被骰到，不能誤學
-    const curA = getLearnedAngleFactor(key, axis, v);
-    setLearnedAngleFactor(key, axis, v, clampNum(curA * (1 + sign * LEARNING_FEEDBACK_STEP), LEARNING_FACTOR_MIN, LEARNING_FACTOR_MAX));
-    angleAdjustments[axis] = v;
-  }
-
-  rec.jointFeedback[key] = liked ? "like" : "dislike";
-
-  learningState.learningLog.unshift({
-    time: Date.now(),
-    rating: liked ? "like" : "dislike",
-    scope: "joint",
-    groupLabels: [LABEL_LOOKUP[key] || key],
-    angleAdjustments
-  });
-  if (learningState.learningLog.length > 30) learningState.learningLog.length = 30;
-
-  saveLearningState();
-  renderFeedbackButtons();
-  renderLearningLog();
-}
-
-function resetLearningState(){
-  learningState.learnedGroupFactor = {};
-  learningState.learnedJointFactor = {};
-  learningState.learnedAngleFactor = {};
-  learningState.learningLog = [];
-  learningState.lastGenerationRecord = null;
-  saveLearningState();
-  renderFeedbackButtons();
-  renderLearningLog();
-}
-
-// 生成完之後呼叫：如果有開啟顯性回饋，畫出「整體」👍/👎按鈕＋「逐關節」評分清單；
-// 沒開啟或沒有待評分紀錄就清空兩邊。兩組按鈕各自獨立顯示/隱藏，互不影響彼此的評分狀態。
-function renderFeedbackButtons(){
-  const wrap = document.getElementById("jlFeedbackButtons");
-  const jointWrap = document.getElementById("jlJointFeedbackWrap");
-  const jointList = document.getElementById("jlJointFeedbackList");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-
-  const rec = learningState.lastGenerationRecord;
-  const hasRec = learningState.feedbackEnabled && !!rec;
-
-  // 整體（分組）評分按鈕：評過一次就收起來，行為跟原本一樣。
-  if (hasRec && !rec.feedbackGiven){
-    const likeBtn = document.createElement("button");
-    likeBtn.textContent = "👍 喜歡";
-    likeBtn.onclick = () => submitExplicitFeedback(true);
-
-    const dislikeBtn = document.createElement("button");
-    dislikeBtn.textContent = "👎 不喜歡";
-    dislikeBtn.onclick = () => submitExplicitFeedback(false);
-
-    wrap.append(likeBtn, dislikeBtn);
-  }
-
-  // 逐關節評分清單：列出這次生成裡實際被重骰的每個關節，各自可以獨立按一次👍/👎，
-  // 只評自己在意的幾個關節也沒問題、不評的關節不影響其他關節的係數。
-  if (jointWrap && jointList){
-    jointList.innerHTML = "";
-    if (!hasRec || !rec.finalKeys || rec.finalKeys.length === 0){
-      jointWrap.style.display = "none";
-    } else {
-      jointWrap.style.display = "";
-      for (const key of rec.finalKeys){
-        const row = document.createElement("span");
-        row.className = "jlJointFbRow";
-
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = LABEL_LOOKUP[key] || key;
-        row.appendChild(nameSpan);
-
-        const editedSince = wasManuallyEditedSince(key, rec.timestamp);
-        const rated = rec.jointFeedback[key]; // "like" | "dislike" | undefined
-
-        if (editedSince){
-          row.classList.add("jlJointFbDim");
-          const note = document.createElement("span");
-          note.textContent = "（已手動調整，不計入）";
-          row.appendChild(note);
-        } else {
-          const likeBtn = document.createElement("button");
-          likeBtn.className = "jlJointFbBtn" + (rated === "like" ? " active" : "");
-          likeBtn.textContent = "👍";
-          likeBtn.disabled = !!rated;
-          likeBtn.onclick = () => submitJointFeedback(key, true);
-
-          const dislikeBtn = document.createElement("button");
-          dislikeBtn.className = "jlJointFbBtn" + (rated === "dislike" ? " active dislike" : "");
-          dislikeBtn.textContent = "👎";
-          dislikeBtn.disabled = !!rated;
-          dislikeBtn.onclick = () => submitJointFeedback(key, false);
-
-          row.append(likeBtn, dislikeBtn);
-        }
-
-        jointList.appendChild(row);
-      }
-    }
-  }
-}
-
-// 畫最近幾筆學習調整紀錄（人看得懂的文字版），供透明度用。
-function renderLearningLog(){
-  const logWrap = document.getElementById("jlLearningLogWrap");
-  const logEl = document.getElementById("jlLearningLog");
-  if (!logWrap || !logEl) return;
-  logEl.innerHTML = "";
-  const entries = learningState.learningLog.slice(0, 8); // 面板上只顯示最近8筆，避免太長
-  logWrap.style.display = entries.length > 0 ? "" : "none";
-  for (const entry of entries){
-    const line = document.createElement("div");
-    const icon = entry.rating === "like" ? "👍" : "👎";
-    const sign = entry.rating === "like" ? "+" : "-";
-    let desc;
-    if (entry.scope === "joint"){
-      desc = "關節「" + (entry.groupLabels[0] || "") + "」";
-      if (entry.angleAdjustments){
-        const axisParts = ["x", "y", "z"]
-          .filter(ax => entry.angleAdjustments[ax] !== undefined && entry.angleAdjustments[ax] !== null)
-          .map(ax => `${ax}=${Math.round(entry.angleAdjustments[ax])}°`);
-        if (axisParts.length) desc += `（${axisParts.join(" ")}）`;
-      }
-    } else {
-      desc = entry.groupLabels && entry.groupLabels.length ? "分組 " + entry.groupLabels.join("、") : "（無分組，Isolation未開啟）";
-    }
-    line.textContent = `${icon} ${desc} → 學習係數 ${sign}${Math.round(LEARNING_FEEDBACK_STEP*100)}%`;
-    logEl.appendChild(line);
-  }
-}
-
-// 加權不放回抽樣：從 pool（分組陣列）依「基準權重 × 學習係數」抽出 count 個不重複分組。
+// 加權不放回抽樣：從 pool（分組陣列）依「基準權重」抽出 count 個不重複分組。
 function pickWeightedGroupsWithoutReplacement(pool, count){
-  const items = pool.map(g => ({ g, w: getGroupWeight(g.id) * getLearnedGroupFactor(g.id) }));
+  const items = pool.map(g => ({ g, w: getGroupWeight(g.id) }));
   const picked = [];
   for (let i = 0; i < count && items.length > 0; i++){
     const total = items.reduce((s, it) => s + it.w, 0);
@@ -1309,11 +1418,134 @@ function clampAxisValue(v, axisLimit){
   return Math.min(hi, Math.max(lo, v));
 }
 
+// ==== Swing-Twist + 橢圓錐限制（球窩關節專用：肩／髖）====
+// 背景：獨立矩形夾限（上面的 clampAxisValue／逐軸各自 min~max）對球窩關節在極端姿勢下
+// 只是近似值——它允許「多軸同時貼近各自極限」的角落姿勢（例如 X=90°、Z=90° 同時發生），
+// 但真實肩／髖關節的可動範圍其實比較接近一個橢圓錐，兩軸同時拉到極限時骨骼、韌帶會互相卡住，
+// 實際上到不了那個角落。
+//
+// 做法：把關節相對 rest pose 的旋轉四元數分解成
+//   twist：繞骨骼長軸的自轉（對應肩／髖的內旋／外旋），沿用 y 軸的 min/max 獨立夾限；
+//   swing：垂直於骨骼長軸的擺動（對應前後／左右抬起），用 x／z 的 min/max 組成橢圓錐夾限，
+//          即 (swingX/limX)²+(swingZ/limZ)² ≤ 1，而不是各自獨立的矩形，
+//          這樣就不會再出現「兩軸同時拉滿」的不可能姿勢。
+// 夾完再組合回四元數、換算回 [x,y,z] 角度寫回 target/current，
+// 對外呼叫端（滑桿、IK、動作生成、關鍵影格…）完全不用改，介面上的三個數字意義不變，
+// 只是「合法範圍」從矩形變成橢圓錐。
+//
+// ⚠️ 骨骼長軸假設為本地 +Y（Mixamo 標準骨架命名慣例：骨骼局部 +Y 指向子關節），
+// 沒有針對 Xbot.glb 逐骨骼實測校正。如果套用後肩／髖轉起來視覺上「歪掉」
+// （例如 Y 滑桿變成在做抬手而不是內外旋），就是這個假設在該骨骼上不成立，
+// 到下面 SWING_TWIST_AXIS_OVERRIDES 填入該骨骼實際的長軸方向即可，不用改其他邏輯。
+// 目前只套用在 rArm/lArm（上臂＝肩關節）、rUpLeg/lUpLeg（大腿＝髖關節）；
+// 手肘/膝蓋是絞鏈關節、手指/脊椎/頭頸也不是球窩關節，維持原本矩形夾限即可，行為不變。
+const SWING_TWIST_JOINTS = new Set(["rArm","lArm","rUpLeg","lUpLeg"]);
+const SWING_TWIST_AXIS_OVERRIDES = {
+  // key: new THREE.Vector3(x,y,z)　→　若某骨骼長軸其實不是本地 +Y，在這裡覆寫即可，會自動 normalize。
+  // 範例：rArm: new THREE.Vector3(1,0,0)
+};
+const _stDefaultTwistAxis = new THREE.Vector3(0,1,0);
+function getTwistAxis(key){
+  return (SWING_TWIST_AXIS_OVERRIDES[key] || _stDefaultTwistAxis).clone().normalize();
+}
+
+// ---- 共用暫存物件（避免每次呼叫都 new，熱路徑友善）----
+const _stQuat = new THREE.Quaternion();
+const _stTwist = new THREE.Quaternion();
+const _stSwing = new THREE.Quaternion();
+const _stAxisVec = new THREE.Vector3();
+const _stU = new THREE.Vector3();
+const _stV = new THREE.Vector3();
+const _stRVec = new THREE.Vector3();
+const _stRefX = new THREE.Vector3(1,0,0);
+const _stRefY = new THREE.Vector3(0,1,0);
+const _stEuler = new THREE.Euler();
+
+// 找出跟 twistAxis 垂直、互相正交的兩個單位向量 u,v，當作「擺動平面」的座標基底。
+function perpBasis(twistAxis, outU, outV){
+  const ref = Math.abs(twistAxis.x) < 0.9 ? _stRefX : _stRefY; // 挑一個跟 twistAxis 不平行的參考向量
+  outU.crossVectors(twistAxis, ref).normalize();
+  outV.crossVectors(twistAxis, outU).normalize();
+}
+
+// 對單一球窩關節的 [x,y,z]（角度）做 Swing-Twist 分解＋橢圓錐/範圍夾限，回傳新的 [x,y,z]（角度）。
+// 三軸都沒啟用限制時直接原樣放行，跟舊版 clampAxisValue 行為一致，不會多做四元數轉換。
+function clampSwingTwistJoint(key, xyzDeg){
+  const lim = JOINT_LIMITS[key];
+  if (!lim.x.enabled && !lim.y.enabled && !lim.z.enabled) return xyzDeg;
+
+  const twistAxis = getTwistAxis(key);
+  eulerToQuat(xyzDeg, _stQuat); // 相對 rest pose 的四元數，寫進共用暫存
+
+  // ---- 分解：twist（繞 twistAxis 的自轉）+ swing（垂直分量）----
+  const dot = _stQuat.x*twistAxis.x + _stQuat.y*twistAxis.y + _stQuat.z*twistAxis.z;
+  _stTwist.set(twistAxis.x*dot, twistAxis.y*dot, twistAxis.z*dot, _stQuat.w).normalize();
+  _stSwing.copy(_stQuat).multiply(_stTwist.clone().invert()); // swing = q * twist⁻¹　（q = swing * twist）
+
+  // ---- twist 夾限：沿用 y 軸 min/max，語意＝內旋／外旋角度 ----
+  let twistRad = 2 * Math.atan2(dot, _stQuat.w); // atan2 對縮放不敏感，用未正規化的 dot/w 就足夠
+  if (lim.y.enabled){
+    twistRad = Math.min(D(lim.y.max), Math.max(D(lim.y.min), twistRad));
+  }
+  _stTwist.setFromAxisAngle(twistAxis, twistRad);
+
+  // ---- swing 夾限：x/z 的 min/max 組成橢圓錐（兩軸都啟用時），單軸啟用時退化成單純範圍夾限 ----
+  const xEnabled = lim.x.enabled, zEnabled = lim.z.enabled;
+  if (xEnabled || zEnabled){
+    perpBasis(twistAxis, _stU, _stV);
+    const swingW = Math.min(1, Math.max(-1, _stSwing.w));
+    const theta = 2 * Math.acos(swingW); // swing 的總擺動角（弧度）
+    let sx = 0, sz = 0;
+    if (theta > 1e-6){
+      _stAxisVec.set(_stSwing.x, _stSwing.y, _stSwing.z).normalize();
+      sx = theta * _stAxisVec.dot(_stU);
+      sz = theta * _stAxisVec.dot(_stV);
+    }
+    if (xEnabled && zEnabled){
+      const limX = D(sx >= 0 ? lim.x.max : Math.abs(lim.x.min));
+      const limZ = D(sz >= 0 ? lim.z.max : Math.abs(lim.z.min));
+      if (limX > 1e-6 && limZ > 1e-6){
+        const nx = sx/limX, nz = sz/limZ, r2 = nx*nx + nz*nz;
+        if (r2 > 1){ const s = 1/Math.sqrt(r2); sx *= s; sz *= s; }
+      }
+    } else if (xEnabled){
+      const limX = D(sx >= 0 ? lim.x.max : Math.abs(lim.x.min));
+      sx = sx >= 0 ? Math.min(sx, limX) : Math.max(sx, -limX);
+    } else { // zEnabled only
+      const limZ = D(sz >= 0 ? lim.z.max : Math.abs(lim.z.min));
+      sz = sz >= 0 ? Math.min(sz, limZ) : Math.max(sz, -limZ);
+    }
+    // 用夾完的 (sx,sz) 反推回 swing 四元數：旋轉向量 r = sx*u + sz*v，長度＝角度、方向＝軸
+    _stRVec.copy(_stU).multiplyScalar(sx).add(_stV.clone().multiplyScalar(sz));
+    const newTheta = _stRVec.length();
+    if (newTheta > 1e-9){
+      _stRVec.multiplyScalar(1/newTheta);
+      _stSwing.setFromAxisAngle(_stRVec, newTheta);
+    } else {
+      _stSwing.identity();
+    }
+  }
+  // x、z 都沒啟用時 swing 完全不動，維持原本自由擺動（跟舊版矩形夾限「未啟用即放行」一致）。
+
+  // ---- 組合回單一四元數，換算回 [x,y,z] 角度 ----
+  _stQuat.copy(_stSwing).multiply(_stTwist); // q = swing * twist
+  _stEuler.setFromQuaternion(_stQuat, "XYZ");
+  return [
+    Math.round(R(_stEuler.x)*10)/10,
+    Math.round(R(_stEuler.y)*10)/10,
+    Math.round(R(_stEuler.z)*10)/10
+  ];
+}
+
 // 對外主要入口：傳入 jointKey + [x,y,z] 角度陣列，回傳夾緊後的新陣列（不修改傳入的原陣列）。
 // 沒有設定限制的 key（例如手指、下半身）直接原樣放行，完全不影響既有行為。
+// rArm/lArm/rUpLeg/lUpLeg（球窩關節）走 Swing-Twist + 橢圓錐限制，其餘關節維持原本矩形夾限。
 function clampJointAngles(key, xyz){
   const lim = JOINT_LIMITS[key];
   if (!lim) return xyz;
+  if (SWING_TWIST_JOINTS.has(key)){
+    return clampSwingTwistJoint(key, xyz);
+  }
   return [
     clampAxisValue(xyz[0], lim.x),
     clampAxisValue(xyz[1], lim.y),
@@ -1327,8 +1559,6 @@ function clampJointAngles(key, xyz){
 // 取樣策略＝格點取樣＋偏向極值：比起純連續均勻隨機，這樣角度容易卡在同一批固定刻度、
 // 也有一定機率直接貼在min或max（=完全伸直/完全折死），視覺上比較接近tutting那種
 // 俐落方正、卡點到位的感覺，而不是軟趴趴的隨意角度。
-// key/axis：用來查角度層級學習係數（第三層），做候選值的加權抽樣；
-// 傳 key=null 或 axis=null 時（目前生成流程不會這樣用，保留給其他呼叫端）視同無學習資料，退回原本均勻隨機。
 function sampleAxisAngle(key, axis, axisLim, gridStep, edgeProb){
   if (!axisLim || !axisLim.enabled) return null; // null＝沒有範圍，呼叫端維持原值
   let lo = axisLim.min, hi = axisLim.max;
@@ -1336,21 +1566,16 @@ function sampleAxisAngle(key, axis, axisLim, gridStep, edgeProb){
   if (hi - lo < 1e-6) return lo; // min===max，沒有隨機空間，直接回傳固定值
 
   if (Math.random() < edgeProb){
-    // 貼邊界：候選值只有 [完全伸直, 完全折死] 兩個，一樣依角度學習係數加權抽樣。
-    return key ? weightedPickAngle(key, axis, [lo, hi]) : (Math.random() < 0.5 ? lo : hi);
+    // 貼邊界：候選值只有 [完全伸直, 完全折死] 兩個。
+    return Math.random() < 0.5 ? lo : hi;
   }
   if (gridStep > 0){
     const steps = Math.floor((hi - lo) / gridStep);
     if (steps <= 0) return lo; // 範圍比一格還窄，直接回傳下限
-    if (!key){
-      const idx = Math.floor(Math.random() * (steps + 1)); // 0 ~ steps（含兩端）
-      return lo + idx * gridStep;
-    }
-    const candidates = [];
-    for (let idx = 0; idx <= steps; idx++) candidates.push(lo + idx * gridStep);
-    return weightedPickAngle(key, axis, candidates);
+    const idx = Math.floor(Math.random() * (steps + 1)); // 0 ~ steps（含兩端）
+    return lo + idx * gridStep;
   }
-  return lo + Math.random() * (hi - lo); // gridStep<=0時退回連續均勻隨機（無離散候選值可加權）
+  return lo + Math.random() * (hi - lo); // gridStep<=0時退回連續均勻隨機
 }
 
 // 產生並套用一個隨機姿勢：對 JOINT_LIMIT_KEYS（全部關節）逐一判斷每一軸有沒有啟用限制。
@@ -1373,7 +1598,6 @@ function generateRandomPose(){
   }
 
   let keysToRoll;
-  let pickedGroupIds = [];
   if (isolationSettings.enabled){
     const eligibleKeySet = new Set(eligibleKeys);
     // 分組裡只要有任一關節「有資格」，這組就有資格被抽中
@@ -1390,7 +1614,6 @@ function generateRandomPose(){
     const pickedKeySet = new Set();
     for (const g of pickedGroups) for (const k of g.keys) if (eligibleKeySet.has(k)) pickedKeySet.add(k);
     keysToRoll = eligibleKeys.filter(k => pickedKeySet.has(k));
-    pickedGroupIds = pickedGroups.map(g => g.id);
 
     if (statusEl) statusEl.textContent = "本次選中：" + pickedGroups.map(g => g.label).join("、");
   } else {
@@ -1401,16 +1624,12 @@ function generateRandomPose(){
   // 第二層篩選：範圍內（分組選中／或Isolation未開啟時的全部有資格關節）的每個關節，
   // 再各自依「機率」決定這次是否真的要重骰——機率100（預設）＝一定摸到，行為跟原本一樣；
   // 機率調低可以做出「同一組裡有些關節常動、有些關節難得動一次」的細節。
-  const finalKeys = keysToRoll.filter(key => Math.random() * 100 < getEffectiveJointWeight(key));
+  const finalKeys = keysToRoll.filter(key => Math.random() * 100 < getJointWeight(key));
   const skippedByWeight = keysToRoll.length - finalKeys.length;
   if (statusEl && skippedByWeight > 0){
     statusEl.textContent += (statusEl.textContent ? "　" : "") + `（另有 ${skippedByWeight} 個關節因機率設定這次跳過）`;
   }
 
-  // jointRolledAngles：這次每個被重骰關節、每一軸「實際抽到的角度值」，null＝這一軸這次
-  // 沒被骰到（未啟用該軸限制，或本來就維持原值）。只給評分時的角度層級學習用，
-  // 重新整理頁面後不需保留，所以不放進 localStorage（跟 lastGenerationRecord 其他欄位一樣是暫時性資料）。
-  const jointRolledAngles = {};
   for (const key of finalKeys){
     const lim = JOINT_LIMITS[key];
     const cur = target[key] || [0,0,0];
@@ -1419,28 +1638,12 @@ function generateRandomPose(){
       sampleAxisAngle(key, "y", lim.y, gridStep, edgeProb),
       sampleAxisAngle(key, "z", lim.z, gridStep, edgeProb)
     ];
-    jointRolledAngles[key] = { x: rawSamples[0], y: rawSamples[1], z: rawSamples[2] };
     const xyz = rawSamples.map((v, i) => v === null ? cur[i] : v); // 沒啟用的軸（null）維持原本角度
     setTarget(key, xyz); // setTarget內部本身也會clamp，這裡等於雙重保險
   }
   setActiveBtn(-1);
   updateSelectedBar();
   updateJointLimitPanelAngles(true);
-
-  // 有開啟顯性回饋才記錄這筆生成，之後才有東西可以按👍/👎；沒開啟就清空避免顯示舊按鈕。
-  if (learningState.feedbackEnabled){
-    learningState.lastGenerationRecord = {
-      timestamp: Date.now(),
-      pickedGroupIds,
-      finalKeys: finalKeys.slice(),
-      feedbackGiven: false,   // 整體（分組）評分是否已按過
-      jointFeedback: {},      // key -> "like"/"dislike"，每個關節各自最多評一次
-      jointRolledAngles       // key -> {x,y,z}，這次實際骰到的角度值（null＝沒被骰到，評分時要排除）
-    };
-  } else {
-    learningState.lastGenerationRecord = null;
-  }
-  renderFeedbackButtons();
 
   pushHistory();
 }
@@ -1692,6 +1895,7 @@ for (const fingerId of FINGER_IDS) fingerIKEnabled[fingerId] = false;
 let trajPointMeshes = { rArm:[], lArm:[], rLeg:[], lLeg:[] };
 let trajLine = {};          // 紫色路徑預覽線（依目前控制點即時重繪）
 let TRAJ_MODE = { rArm:"line", lArm:"line", rLeg:"line", lLeg:"line" }; // 'line' | 'curve'
+let TRAJ_CLOSED = { rArm:false, lArm:false, rLeg:false, lLeg:false }; // 是否首尾相連封閉成迴圈（需≥3點才生效）
 let trajActiveLimb = "rArm"; // 目前「軌跡」分頁編輯中的肢體（只有這個肢體的控制點球/路徑線會顯示）
 let trajSampleCount = 8;     // 生成拍點時沿路徑等間隔取樣幾點（2~20）
 
@@ -1743,6 +1947,9 @@ let ghostBones = { prev:{}, next:{} };
 
 // ---- Keyframe 時間軸狀態 ----
 let kfChipEls = [];       // 對應 keyframes 索引的 chip DOM 節點快取，播放時靠這個直接切換 class，避免逐幀重建整份清單
+let kfDragSrcIndex = -1;  // 拖曳排序中，目前正在被拖曳的拍點索引（-1＝沒有拖曳中）
+let kfMultiSelectMode = false;    // 是否處於「多選批次刪除」模式
+let kfMultiSelected = new Set();  // 多選模式下已勾選的拍點索引
 let keyframes = [];       // [{ angles: { jointKey: [x,y,z], ... } }, ...]
 let kfEditingIndex = -1;  // 目前選取（預覽/可更新/可刪除）的拍點
 let kfPlaying = false;
@@ -1895,7 +2102,7 @@ function buildEasingSelectOptions(){
 const EG_W = 84, EG_H = 42, EG_PAD = 5, EG_Y_MIN = -0.4, EG_Y_MAX = 1.4;
 const EG_DURATION = 1400, EG_PAUSE = 500, EG_CYCLE = EG_DURATION + EG_PAUSE;
 let easingGalleryCardRefs = null;   // 建好之後快取，分頁沒開過就不用先建
-let easingGalleryPlaying = true;    // 由「暫停/播放」按鈕與 prefers-reduced-motion 共同控制
+let easingGalleryPlaying = false;   // 預設關閉；由「暫停/播放」按鈕與 prefers-reduced-motion 共同控制
 let easingGalleryStartTime = null;  // 目前這輪循環的起點時間戳（rAF timestamp）
 
 // 卡片內部小型 SVG：格線 + 對角參考虛線 + 曲線本體（沿用 easingSVGPath，尺寸跟主選單預覽不同）
@@ -1971,7 +2178,7 @@ function easingGalleryLoop(now){
 function initEasingGallery(){
   let reducedMotion = false;
   try { reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
-  easingGalleryPlaying = !reducedMotion;
+  easingGalleryPlaying = false; // 預設關閉動畫，需使用者按「播放動畫」才會開始
   const playBtn = document.getElementById("egPlayBtn");
   const hint = document.getElementById("egReducedMotionHint");
   if (reducedMotion && hint) hint.style.display = "";
@@ -1987,24 +2194,11 @@ function initEasingGallery(){
   requestAnimationFrame(easingGalleryLoop);
 }
 
-const POSES = [
-  { name:"待機", rArm:[0,0,0], rForeArm:[0,0,0], rHand:[0,0,0],
-                 lArm:[0,0,0], lForeArm:[0,0,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] },
-  { name:"方框", rArm:[0,0,-80], rForeArm:[0,-90,0], rHand:[0,0,0],
-                 lArm:[0,0,80], lForeArm:[0,90,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] },
-  { name:"King Tut", rArm:[10,0,-85], rForeArm:[0,-95,0], rHand:[0,0,-25],
-                      lArm:[-10,0,60], lForeArm:[0,15,0], lHand:[0,0,0], head:[0,-12,0], spine:[0,0,6] },
-  { name:"機械人", rArm:[-15,0,-70], rForeArm:[0,-10,0], rHand:[0,0,85],
-                   lArm:[-15,0,70], lForeArm:[0,10,0], lHand:[0,0,-85], head:[0,0,0], spine:[0,0,0] },
-  { name:"爆炸", rArm:[10,0,-150], rForeArm:[0,-25,0], rHand:[0,0,20],
-                 lArm:[10,0,150], lForeArm:[0,25,0], lHand:[0,0,-20], head:[0,0,0], spine:[0,0,0] },
-  { name:"凍結", rArm:[0,0,-45], rForeArm:[0,-100,0], rHand:[0,0,35],
-                 lArm:[-30,0,85], lForeArm:[0,20,0], lHand:[0,0,0], head:[0,15,0], spine:[0,0,-6] },
-  { name:"斜切", rArm:[0,0,-95], rForeArm:[0,-55,0], rHand:[0,0,-55],
-                 lArm:[10,0,65], lForeArm:[0,75,0], lHand:[0,0,55], head:[0,-15,0], spine:[0,0,10] },
-  { name:"十字", rArm:[0,0,-85], rForeArm:[0,0,0], rHand:[0,0,0],
-                 lArm:[0,0,85], lForeArm:[0,0,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] }
-];
+// 待機姿勢：resetPose() 用來把所有關節歸零的基準資料。
+// （原本這裡是一個含 8 種預設姿勢的 POSES 陣列，但只有這筆「待機」真正被用到，
+// 其餘 7 筆從未被任何程式碼讀取，屬於死資料，已一併清除。）
+const IDLE_POSE = { name:"待機", rArm:[0,0,0], rForeArm:[0,0,0], rHand:[0,0,0],
+                     lArm:[0,0,0], lForeArm:[0,0,0], lHand:[0,0,0], head:[0,0,0], spine:[0,0,0] };
 
 init();
 
@@ -2276,11 +2470,15 @@ function createGrabBoxCore(deps){
     }
   }
 
+  // 供閒置偵測用：箱子專屬控制環正在被拖曳時（改變 mesh 位置/角度），扶握中的手也會跟著動，
+  // 這段期間必須視為「場景活躍中」，不能被閒置降頻邏輯跳過。
+  function isDragging(){ return !!(gizmo && gizmo.dragging); }
+
   return {
     setVisible, setMode, setShapeType, setShapeParam,
     setGrabHand, releaseHand,
     getState, onChange,
-    buildAfterModelLoad, updateEachFrame,
+    buildAfterModelLoad, updateEachFrame, isDragging,
   };
 }
 
@@ -2554,6 +2752,7 @@ function loadModel(){
 
     buildJointMarkers();
     buildSkeletonLines();
+    buildHandCollisionVizMeshes();
     buildIKMarkers();
     buildSpineIKMarker();
     buildLookAtMarkers();
@@ -2563,6 +2762,7 @@ function loadModel(){
     buildJointLimitPanel();
     buildOverviewPanel();
     buildJsonRefTable();
+    rebuildIKDrivenKeys(); // 防呆：初始四個開關都是 false，理論上等於空集合，但不依賴這個假設
 
     // 扶握箱核心：依賴用「讀取用函式」注入，不直接傳物件參照，
     // 避免主程式之後改變 bones/ikTargetMeshes 時，核心還抱著舊的參照。
@@ -3040,6 +3240,10 @@ function syncSpineIKMarkerToDefault(){
 // Head 自己的旋轉仍保留 FK 可調整（跟手腳 IK 保留末端 FK 是同樣設計）。
 function setSpineIKEnabled(on){
   spineIKEnabled = on;
+  // 緊接在賦值後重建，而不是放函式結尾：下面有跟 setLookAtEnabled 互斥的互相呼叫，
+  // 內層呼叫也會各自重建一次。因為 rebuildIKDrivenKeys() 是「整份重算」而非增量更新，
+  // 不管誰先誰後、重建幾次，最終結果都等於當下四個開關狀態的正解。
+  rebuildIKDrivenKeys();
   if (on) syncSpineIKMarkerToDefault();
   spineIKTargetMesh.visible = on;
   for (const key of SPINE_IK_CHAIN.bones){
@@ -3083,6 +3287,7 @@ function syncLookAtMarkerToDefault(name){
 // spine2 的旋轉權，所以互斥——開其中一個會自動關掉另一個，避免打架看起來抖動。
 function setLookAtEnabled(name, on){
   lookAtEnabled[name] = on;
+  rebuildIKDrivenKeys(); // 理由同 setSpineIKEnabled：兩者會互相呼叫，整份重算不怕重複
   if (on) syncLookAtMarkerToDefault(name);
   lookAtTargetMesh[name].visible = on;
   if (on && name === "chest" && spineIKEnabled) setSpineIKEnabled(false);
@@ -3127,6 +3332,7 @@ function syncFingerIKMarkerToDefault(fingerId){
 // 跟手腳/脊椎IK同樣的「開啟時同步target球到目前姿勢位置，避免瞬間跳動」設計。
 function setFingerIKEnabled(fingerId, on){
   fingerIKEnabled[fingerId] = on;
+  rebuildIKDrivenKeys(); // 必須在下面的 early return「之前」，否則指名錯誤時集合會漏更新
   const chain = FINGER_IK_CHAINS[fingerId];
   if (!chain) return;
   if (on) syncFingerIKMarkerToDefault(fingerId);
@@ -3191,7 +3397,7 @@ function buildFingerPanel(){
 // ---- 關節限制分頁：依 OVERVIEW_GROUPS 分組建立全部關節的限制編輯 UI（可個別收合）----
 let jointLimitCurAngleEls = {}; // key -> 標題旁「目前角度」的 <span>，逐幀更新用
 let jointLimitGroupCollapsed = {}; // groupId -> bool，記住使用者展開/收合狀態（跟總覽分頁分開記）
-let jlAdvancedVisible = false; // 進階設定（格距/貼邊機率/Isolation/顯性回饋/每關節機率/分組權重）預設收起來，簡化介面
+let jlAdvancedVisible = false; // 進階設定（格距/貼邊機率/Isolation/每關節機率/分組權重）預設收起來，簡化介面
 
 function jlMatchesFilter(key){
   const input = document.getElementById("jlFilterInput");
@@ -3407,25 +3613,6 @@ function buildJointLimitPanel(){
   if (isoMinInput) isoMinInput.onchange = onIsolationSettingChange;
   if (isoMaxInput) isoMaxInput.onchange = onIsolationSettingChange;
 
-  // 顯性回饋開關 + 重置學習按鈕
-  const feedbackChk = document.getElementById("jlFeedbackEnabledChk");
-  if (feedbackChk){
-    feedbackChk.checked = learningState.feedbackEnabled;
-    feedbackChk.onchange = () => {
-      learningState.feedbackEnabled = feedbackChk.checked;
-      if (!learningState.feedbackEnabled) learningState.lastGenerationRecord = null; // 關掉就沒有待評分的紀錄
-      saveLearningState();
-      renderFeedbackButtons();
-    };
-  }
-  const resetLearningBtn = document.getElementById("jlResetLearningBtn");
-  if (resetLearningBtn) resetLearningBtn.onclick = () => {
-    if (!confirm("確定要重置學習係數嗎？（不會影響你手動設定的限制範圍/權重/機率）")) return;
-    resetLearningState();
-  };
-  renderFeedbackButtons();
-  renderLearningLog();
-
   const filterInput = document.getElementById("jlFilterInput");
   if (filterInput) filterInput.oninput = () => buildJointLimitPanel();
 
@@ -3488,24 +3675,87 @@ function buildTrajMarkers(){
   }
 }
 
-// 新增一顆控制點球，直接對齊該肢體目前IK target球的世界座標（明確需求：不要自動偏移/延伸）
-function addTrajPoint(limb){
-  const targetMesh = ikTargetMeshes[limb];
-  if (!targetMesh) return;
+// 共用輔助：在指定世界座標建立一顆紫色控制點球並掛進場景/陣列（不含後續的視覺重繪/存檔，
+// 呼叫端在整批新增完後自己統一呼叫 updateTrajVisual/renderTrajPointList/scheduleAutoSave，
+// 避免形狀產生器一次生成 N 個點時重複做 N 次多餘的重繪）。
+function createTrajPointAt(limb, worldPos){
   const geo = new THREE.SphereGeometry(0.026, 12, 12);
   const mat = new THREE.MeshBasicMaterial({ color:0x9944ff, transparent:true, opacity:0.9, depthTest:false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 998;
-  mesh.position.copy(targetMesh.position);
+  mesh.position.copy(worldPos);
   mesh.visible = (limb === trajActiveLimb);
   mesh.userData.pickType = "trajPoint";
   mesh.userData.limb = limb;
   mesh.userData.index = trajPointMeshes[limb].length;
   scene.add(mesh);
   trajPointMeshes[limb].push(mesh);
+  return mesh;
+}
+
+// 新增一顆控制點球，直接對齊該肢體目前IK target球的世界座標（明確需求：不要自動偏移/延伸）
+function addTrajPoint(limb){
+  const targetMesh = ikTargetMeshes[limb];
+  if (!targetMesh) return;
+  createTrajPointAt(limb, targetMesh.position);
   updateTrajVisual(limb);
   renderTrajPointList();
   scheduleAutoSave();
+}
+
+// ---- 形狀產生器：圓形／橢圓形／正多邊形／星形 ----
+// 以「目前該肢體IK目標球的世界座標」當中心（跟手動新增控制點同一套慣例：先把橘色球拖到位），
+// 在指定平面上分佈頂點，取代掉目前這個肢體既有的控制點。
+// plane: 'xz'（水平面，像轉呼拉圈）｜'xy'（垂直面朝前，像畫時鐘面對鏡頭）｜'yz'（垂直面側向，手側邊畫圈）
+// opts.radiusY：橢圓形的短半徑（沿 axisB 方向）；opts.innerRatio：星形內凹頂點半徑＝radius*innerRatio
+const TRAJ_SHAPE_PLANE_AXES = {
+  xz: [new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,1)],
+  xy: [new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0)],
+  yz: [new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)],
+};
+function generateShapeTrajPoints(limb, shapeType, n, radius, plane, opts = {}){
+  const targetMesh = ikTargetMeshes[limb];
+  if (!targetMesh){ alert("找不到「" + limb + "」的 IK 目標球，請先到「手腳 IK」分頁開啟該肢體 IK"); return; }
+  if (trajPointMeshes[limb].length > 0){
+    const ok = confirm("這會清除「" + limb + "」目前已有的 " + trajPointMeshes[limb].length + " 個控制點，改成產生的形狀，確定要繼續嗎？");
+    if (!ok) return;
+  }
+  clearTrajPoints(limb); // 內部已含 updateTrajVisual/renderTrajPointList/scheduleAutoSave，但下面還會再重繪一次沒關係
+
+  const center = targetMesh.position.clone();
+  const [axisA, axisB] = TRAJ_SHAPE_PLANE_AXES[plane] || TRAJ_SHAPE_PLANE_AXES.xz;
+  // 短半徑只對橢圓形有意義；其餘形狀一律 rY = rX = radius，避免呼叫端不小心傳入不相干的 radiusY
+  // （例如殘留的舊欄位值）把圓形/多邊形/星形拉成歪斜的橢圓。
+  const radiusY = (shapeType === "ellipse" && typeof opts.radiusY === "number" && opts.radiusY > 0) ? opts.radiusY : radius;
+  const innerRatio = clampNum(opts.innerRatio ?? 0.5, 0.1, 0.9);
+
+  // 星形：n 是「角數」，實際頂點數是 2n（外角/內凹交替），跟圓形/橢圓形/多邊形統一用
+  // 「單一迴圈依角度算頂點」的寫法，只是星形多了「奇偶頂點半徑不同」這個變化。
+  const vertCount = (shapeType === "star") ? Math.round(clampNum(n, 3, 24)) * 2 : Math.round(clampNum(n, 3, 48));
+
+  for (let i = 0; i < vertCount; i++){
+    // -90度(即 -PI/2)偏移只是讓第一個點落在「正上方/正前方」，視覺上比較直覺，純美觀不影響形狀本身
+    const angle = (i / vertCount) * Math.PI * 2 - Math.PI / 2;
+    let rX = radius, rY = radiusY;
+    if (shapeType === "star" && i % 2 === 1){ rX *= innerRatio; rY *= innerRatio; } // 奇數索引＝內凹頂點
+    const offset = axisA.clone().multiplyScalar(Math.cos(angle) * rX)
+      .add(axisB.clone().multiplyScalar(Math.sin(angle) * rY));
+    createTrajPointAt(limb, center.clone().add(offset));
+  }
+
+  // 一律用折線＋封閉路徑：圓形/橢圓形點數夠多時折線本身就非常接近圓/橢圓，且能保證所有生成點都
+  // 精確落在圓周/橢圓周上；正多邊形、星形的「直邊」更是形狀定義本身。曲線模式（Catmull-Rom）為了
+  // 平滑，實際路徑會些微偏離控制點，反而讓形狀不夠「正」，所以形狀產生器一律不用曲線模式。
+  TRAJ_MODE[limb] = "line";
+  TRAJ_CLOSED[limb] = true;
+
+  const modeSel = document.getElementById("trajModeSelect");
+  if (modeSel && limb === trajActiveLimb) modeSel.value = "line";
+
+  updateTrajVisual(limb);
+  renderTrajPointList();
+  scheduleAutoSave();
+  pushHistory();
 }
 
 // 刪除單一控制點；刪除後把剩餘點的 userData.index 重新編號，保持跟陣列索引一致
@@ -3543,11 +3793,12 @@ function updateTrajVisual(limb){
     line.visible = false;
   } else {
     let linePts;
+    const closed = TRAJ_CLOSED[limb] && pts.length >= 3; // 封閉至少需要3點才有意義，2點封閉只是來回抖動
     if (TRAJ_MODE[limb] === "curve" && pts.length >= 3){
-      const curve = new THREE.CatmullRomCurve3(pts);
+      const curve = new THREE.CatmullRomCurve3(pts, closed);
       linePts = curve.getPoints(Math.max(20, pts.length * 10));
     } else {
-      linePts = pts;
+      linePts = closed ? [...pts, pts[0]] : pts; // 折線封閉：預覽線多畫一段回到起點
     }
     line.geometry.dispose();
     line.geometry = new THREE.BufferGeometry().setFromPoints(linePts);
@@ -3571,7 +3822,19 @@ function setTrajActiveLimb(limb){
   updateTrajActiveVisibility();
   const modeSel = document.getElementById("trajModeSelect");
   if (modeSel) modeSel.value = TRAJ_MODE[limb];
+  updateTrajClosedChkState();
   renderTrajPointList();
+}
+
+// 封閉路徑checkbox：點數<3時停用（2點封閉只是來回抖動沒意義），並同步目前肢體的勾選狀態。
+// 呼叫時機：切換編輯中肢體、每次新增/刪除控制點（renderTrajPointList尾端）。
+function updateTrajClosedChkState(){
+  const chk = document.getElementById("trajClosedChk");
+  if (!chk) return;
+  const pts = trajPointMeshes[trajActiveLimb];
+  const enoughPoints = !!pts && pts.length >= 3;
+  chk.disabled = !enoughPoints;
+  chk.checked = enoughPoints && TRAJ_CLOSED[trajActiveLimb];
 }
 
 function updateTrajLimbButtons(){
@@ -3584,11 +3847,17 @@ function updateTrajLimbButtons(){
 // 軌跡分頁裡的控制點清單（Pxx晶片，可點選/刪除）
 function renderTrajPointList(){
   const host = document.getElementById("trajPointList");
-  const empty = document.getElementById("trajPointEmpty");
-  if (!host || !empty) return;
+  if (!host) return;
   host.innerHTML = "";
   const pts = trajPointMeshes[trajActiveLimb];
+  updateTrajClosedChkState();
   if (!pts || pts.length === 0){
+    // 動態建立空清單提示文字，不依賴靜態 #trajPointEmpty 節點——
+    // 該節點一旦在非空清單時被 host.innerHTML="" 清掉就永久脫離DOM，
+    // 之後 getElementById 會一直回傳 null，導致清單卡死不再更新（已修正的舊bug）。
+    const empty = document.createElement("span");
+    empty.id = "trajPointEmpty";
+    empty.textContent = "尚未新增控制點——先拖橘色目標球到位，再按「+ 新增控制點」";
     host.appendChild(empty);
     return;
   }
@@ -3613,21 +3882,26 @@ function renderTrajPointList(){
 }
 
 // ---- 純數學取樣函式：不依賴場景中的mesh是否還存在，播放時就是靠這個函式直接算座標 ----
-// mode: 'line' | 'curve'；points: THREE.Vector3 或 {x,y,z} 陣列（相對座標）；t: 0~1 進度
-function sampleTrajectoryFromPoints(mode, points, t){
+// mode: 'line' | 'curve'；points: THREE.Vector3 或 {x,y,z} 陣列（相對座標）；t: 0~1 進度；
+// closed: 是否首尾相連封閉成迴圈（點數<3時強制視為不封閉，2點封閉只是來回抖動沒有意義）
+function sampleTrajectoryFromPoints(mode, points, t, closed){
   const pts = points.map(p => (p instanceof THREE.Vector3) ? p : new THREE.Vector3(p.x, p.y, p.z));
   if (pts.length === 0) return new THREE.Vector3();
   if (pts.length === 1) return pts[0].clone();
   t = clampNum(t, 0, 1);
+  const canClose = !!closed && pts.length >= 3;
   if (mode === "curve" && pts.length >= 3){
-    const curve = new THREE.CatmullRomCurve3(pts);
+    // CatmullRomCurve3 原生支援 closed 參數：t=1 會剛好繞回 t=0，不用額外處理收尾段
+    const curve = new THREE.CatmullRomCurve3(pts, canClose);
     return curve.getPoint(t);
   }
-  // 折線模式（或曲線但點數<3時退回折線）：依各段弦長比例決定 t 落在哪一段
+  // 折線模式（或曲線但點數<3時退回折線）：依各段弦長比例決定 t 落在哪一段。
+  // 封閉時段數多算一段「最後一點→第一點」，用 (i+1)%pts.length 取下一點即可自然接回起點。
+  const segCount = canClose ? pts.length : pts.length - 1;
   const segLens = [];
   let total = 0;
-  for (let i = 0; i < pts.length - 1; i++){
-    const d = pts[i].distanceTo(pts[i + 1]);
+  for (let i = 0; i < segCount; i++){
+    const d = pts[i].distanceTo(pts[(i + 1) % pts.length]);
     segLens.push(d);
     total += d;
   }
@@ -3636,7 +3910,7 @@ function sampleTrajectoryFromPoints(mode, points, t){
   for (let i = 0; i < segLens.length; i++){
     if (remain <= segLens[i] || i === segLens.length - 1){
       const segT = segLens[i] < 1e-8 ? 0 : clampNum(remain / segLens[i], 0, 1);
-      return pts[i].clone().lerp(pts[i + 1], segT);
+      return pts[i].clone().lerp(pts[(i + 1) % pts.length], segT);
     }
     remain -= segLens[i];
   }
@@ -3646,7 +3920,7 @@ function sampleTrajectoryFromPoints(mode, points, t){
 // sampleTrajectoryFromPoints 的即時預覽包裝：讀場景中 trajPointMeshes 目前的world座標
 function sampleTrajectory(limb, t){
   const pts = trajPointMeshes[limb].map(m => m.position.clone());
-  return sampleTrajectoryFromPoints(TRAJ_MODE[limb], pts, t);
+  return sampleTrajectoryFromPoints(TRAJ_MODE[limb], pts, t, TRAJ_CLOSED[limb]);
 }
 
 // 沿目前控制點路徑等間隔取樣 trajSampleCount 個點，每點都當成一次「使用者手動擺好IK再按新增拍點」，
@@ -3663,6 +3937,7 @@ function generateKeyframesFromTrajectory(limb){
   const n = Math.round(clampNum(trajSampleCount, 2, 20));
   const trajId = "traj_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
   const mode = TRAJ_MODE[limb];
+  const closed = TRAJ_CLOSED[limb] && pts.length >= 3;
 
   // 生成當下：以此刻 root 骨骼世界座標為原點，把所有控制點/pole換算成「相對root」的偏移量，
   // 這個原點只在生成當下取一次（見文件描述），之後每個取樣點都疊加在這個固定原點上。
@@ -3674,7 +3949,7 @@ function generateKeyframesFromTrajectory(limb){
 
   for (let i = 0; i < n; i++){
     const t = i / (n - 1);
-    const localOffset = sampleTrajectoryFromPoints(mode, relPoints, t);
+    const localOffset = sampleTrajectoryFromPoints(mode, relPoints, t, closed);
     const worldPos = rootPos.clone().add(localOffset);
     ikTargetMeshes[limb].position.copy(worldPos);
 
@@ -3689,7 +3964,7 @@ function generateKeyframesFromTrajectory(limb){
     addKeyframe();
     const kf = keyframes[keyframes.length - 1];
     kf.traj = kf.traj || {};
-    kf.traj[limb] = { id: trajId, mode, points: relPoints, pole: poleRelObj, t };
+    kf.traj[limb] = { id: trajId, mode, points: relPoints, pole: poleRelObj, t, closed };
   }
   renderKeyframeChips();
   scheduleAutoSave();
@@ -3746,6 +4021,7 @@ function setIKEnabled(limb, on){
   // 手動關掉某隻手的 IK → 通知扶握箱核心釋放扶握，避免殘留錯誤綁定
   if (!on && grabBoxCore && (limb === "rArm" || limb === "lArm")) grabBoxCore.releaseHand(limb);
   ikEnabled[limb] = on;
+  rebuildIKDrivenKeys();
   const chain = IK_CHAINS[limb];
 
   if (on) syncIKMarkersToDefault(limb);
@@ -3894,6 +4170,51 @@ function bindIKUI(){
   if (dualAnchorCb) dualAnchorCb.onchange = (e) => { dualAnchorEnabled = e.target.checked; };
   const shoulderAssistCb = document.getElementById("shoulderAssistCb");
   if (shoulderAssistCb) shoulderAssistCb.onchange = (e) => { shoulderAssistEnabled = e.target.checked; };
+  const handCollisionCb = document.getElementById("handCollisionCb");
+  if (handCollisionCb) handCollisionCb.onchange = (e) => { handCollisionEnabled = e.target.checked; };
+  const handHandCollisionCb = document.getElementById("handHandCollisionCb");
+  if (handHandCollisionCb) handHandCollisionCb.onchange = (e) => { handHandCollisionEnabled = e.target.checked; };
+
+  // ---- 手部-身體碰撞：膠囊/球半徑滑桿（4段軀幹 + 4段腿 + 1顆頭 + 1個手掌球），
+  // 即時寫回 ALL_BODY_CAPSULES（其實就是 TORSO_CAPSULES/LEG_CAPSULES/HEAD_CAPSULES 的物件參照）/ HAND_COLLISION_RADIUS ----
+  function refreshHandCollisionSliderUI(){
+    ALL_BODY_CAPSULES.forEach((cap, i) => {
+      const s = document.getElementById("hcRadiusSlider_" + i);
+      const v = document.getElementById("hcRadiusVal_" + i);
+      if (s) s.value = String(cap.radius);
+      if (v) v.textContent = cap.radius.toFixed(3);
+    });
+    const hs = document.getElementById("hcHandRadiusSlider");
+    const hv = document.getElementById("hcHandRadiusVal");
+    if (hs) hs.value = String(HAND_COLLISION_RADIUS);
+    if (hv) hv.textContent = HAND_COLLISION_RADIUS.toFixed(3);
+  }
+  refreshHandCollisionSliderUI(); // 開頁先把滑桿位置同步成 loadHandCollisionRadii() 還原出來的值
+
+  ALL_BODY_CAPSULES.forEach((cap, i) => {
+    const slider = document.getElementById("hcRadiusSlider_" + i);
+    const val = document.getElementById("hcRadiusVal_" + i);
+    if (!slider) return;
+    slider.oninput = (e) => {
+      cap.radius = parseFloat(e.target.value);
+      if (val) val.textContent = cap.radius.toFixed(3);
+      saveHandCollisionRadii();
+    };
+  });
+  const hcHandRadiusSlider = document.getElementById("hcHandRadiusSlider");
+  const hcHandRadiusVal = document.getElementById("hcHandRadiusVal");
+  if (hcHandRadiusSlider) hcHandRadiusSlider.oninput = (e) => {
+    HAND_COLLISION_RADIUS = parseFloat(e.target.value);
+    if (hcHandRadiusVal) hcHandRadiusVal.textContent = HAND_COLLISION_RADIUS.toFixed(3);
+    saveHandCollisionRadii();
+  };
+  const hcRadiusResetBtn = document.getElementById("hcRadiusResetBtn");
+  if (hcRadiusResetBtn) hcRadiusResetBtn.onclick = () => {
+    ALL_BODY_CAPSULES.forEach((cap, i) => { cap.radius = ALL_BODY_CAPSULE_RADIUS_DEFAULTS[i]; });
+    HAND_COLLISION_RADIUS = HAND_COLLISION_RADIUS_DEFAULT;
+    refreshHandCollisionSliderUI();
+    saveHandCollisionRadii();
+  };
 
   // ---- 進階/阻尼設定：身體跟隨阻尼、脊椎CCD阻尼 ----
   const rootFollowDampSlider = document.getElementById("rootFollowDampSlider");
@@ -3953,6 +4274,15 @@ function bindTrajUI(){
     };
   }
 
+  const closedChk = document.getElementById("trajClosedChk");
+  if (closedChk){
+    closedChk.onchange = (e) => {
+      TRAJ_CLOSED[trajActiveLimb] = e.target.checked;
+      updateTrajVisual(trajActiveLimb);
+      scheduleAutoSave();
+    };
+  }
+
   const addBtn = document.getElementById("trajAddPointBtn");
   if (addBtn) addBtn.onclick = () => addTrajPoint(trajActiveLimb);
 
@@ -3973,7 +4303,68 @@ function bindTrajUI(){
   const genBtn = document.getElementById("trajGenerateBtn");
   if (genBtn) genBtn.onclick = () => { generateKeyframesFromTrajectory(trajActiveLimb); pushHistory(); };
 
+  bindTrajShapeGenUI();
   renderTrajPointList();
+}
+
+// 形狀產生器（圓形／橢圓形／正多邊形／星形）綁定：跟其他軌跡控制項獨立拆出來，因為切換
+// 「形狀類型」需要連動顯示/隱藏對應欄位（橢圓的短半徑、星形的內凹比例）並調整點數/邊數的預設範圍，
+// 邏輯比其他單純的 onchange 多一點。
+function bindTrajShapeGenUI(){
+  const typeSel = document.getElementById("trajShapeTypeSelect");
+  const sidesInput = document.getElementById("trajShapeSidesInput");
+  const sidesLabel = document.getElementById("trajShapeSidesLabel");
+  const radiusInput = document.getElementById("trajShapeRadiusInput");
+  const radiusLabel = document.getElementById("trajShapeRadiusLabel");
+  const radiusYInput = document.getElementById("trajShapeRadiusYInput");
+  const radiusYLabel = document.getElementById("trajShapeRadiusYLabel");
+  const innerRatioInput = document.getElementById("trajShapeInnerRatioInput");
+  const innerRatioLabel = document.getElementById("trajShapeInnerRatioLabel");
+  const planeSel = document.getElementById("trajShapePlaneSelect");
+  const genShapeBtn = document.getElementById("trajGenShapeBtn");
+  if (!typeSel || !sidesInput || !genShapeBtn) return;
+
+  // 依形狀類型切換：點數/邊數欄位的標籤與合理範圍、半徑欄位的標籤、要顯示哪些額外欄位
+  // （橢圓形要顯示短半徑；星形要顯示內凹比例；圓形/多邊形都不需要，維持隱藏）。
+  function syncFieldsForType(){
+    const type = typeSel.value;
+    radiusYLabel.style.display = (type === "ellipse") ? "" : "none";
+    radiusYInput.style.display = (type === "ellipse") ? "" : "none";
+    innerRatioLabel.style.display = (type === "star") ? "" : "none";
+    innerRatioInput.style.display = (type === "star") ? "" : "none";
+    radiusLabel.textContent = (type === "ellipse") ? "長半徑(公尺)" : "半徑(公尺)";
+
+    if (type === "circle" || type === "ellipse"){
+      sidesLabel.textContent = "點數";
+      sidesInput.min = "8"; sidesInput.max = "48";
+      if (parseInt(sidesInput.value, 10) < 8) sidesInput.value = "20";
+    } else if (type === "star"){
+      sidesLabel.textContent = "角數";
+      sidesInput.min = "3"; sidesInput.max = "12";
+      if (parseInt(sidesInput.value, 10) > 12) sidesInput.value = "5";
+    } else { // polygon
+      sidesLabel.textContent = "邊數";
+      sidesInput.min = "3"; sidesInput.max = "12";
+      if (parseInt(sidesInput.value, 10) > 12) sidesInput.value = "5";
+    }
+  }
+  typeSel.onchange = syncFieldsForType;
+  syncFieldsForType();
+
+  genShapeBtn.onclick = () => {
+    const shapeType = typeSel.value;
+    const n = parseInt(sidesInput.value, 10) || (shapeType === "star" ? 5 : (shapeType === "polygon" ? 5 : 20));
+    const radius = parseFloat(radiusInput.value) || 0.15;
+    const plane = planeSel.value;
+    // 短半徑（radiusY）只有橢圓形才有意義；圓形/多邊形/星形一律不傳，讓 rX/rY 都等於 radius，
+    // 避免隱藏欄位裡殘留的舊數值（例如上次用橢圓形留下的 0.08）污染到其他形狀，
+    // 造成「明明選圓形/星形，卻被拉成橢圓、放大後越來越狹長」的問題。
+    const opts = {
+      radiusY: (shapeType === "ellipse") ? (parseFloat(radiusYInput.value) || radius) : radius,
+      innerRatio: parseFloat(innerRatioInput.value) || 0.5,
+    };
+    generateShapeTrajPoints(trajActiveLimb, shapeType, n, radius, plane, opts);
+  };
 }
 
 // 所有目前「可被點擊」的球（關節球 + 可見的 IK 目標球／極向球），自己過濾 visible，
@@ -4156,8 +4547,6 @@ function commitFromBone(key){
   }
   target[key] = deg;
   current[key] = deg.slice();
-  jointLastManualEditTime[key] = Date.now(); // 給顯性回饋歸因用：這個關節剛被使用者手動改過
-  renderFeedbackButtons(); // 立刻把逐關節評分清單裡這個關節標成「已手動調整，不計入」
   setActiveBtn(-1);
   updateSelectedBar();
 }
@@ -4180,14 +4569,17 @@ function applyPose(p){
 
 function resetPose(){
   for (const k of ALL_JOINT_KEYS){ current[k] = [0,0,0]; target[k] = [0,0,0]; }
-  applyPose(POSES[0]);
+  applyPose(IDLE_POSE);
   resetBodyTransform();
   poseIndex = 0;
   setActiveBtn(0);
 }
 
+// 註：這裡原本會去切換 #poseBtns 底下按鈕的 active 樣式，但頁面上已經沒有
+// id="poseBtns" 這個容器了（姿勢快捷按鈕功能已移除），這行查詢一定是空清單、
+// 完全不會有效果，屬於死程式碼，故清空函式內容。呼叫端（各處 setActiveBtn(...)）
+// 保留不動，維持呼叫介面相容，之後如果要恢復姿勢按鈕功能可以直接在這裡補回邏輯。
 function setActiveBtn(i){
-  document.querySelectorAll("#poseBtns button").forEach((b, idx) => b.classList.toggle("active", idx===i));
 }
 
 // ---- JSON 匯出/匯入（單一姿勢） ----
@@ -4327,17 +4719,99 @@ const BODY_LIB_JOINT_KEYS = ALL_JOINT_KEYS.filter(k => !FINGER_JOINT_KEY_SET.has
 
 function makeLibId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
+// ---- 資料庫 schema 版本控管 ----
+// 目前寫入 localStorage 的格式固定為 { v: CURRENT_LIB_SCHEMA_VERSION, items: [...] }。
+// 舊版（本次更新之前）直接把陣列存進 localStorage，沒有版本欄位；讀取時偵測到「純陣列」
+// 就視為 legacy 格式自動轉換，之後存回去就會變成新的 envelope 格式。
+// 未來如果要調整 items 內部資料結構，把版本號 +1，並在 LIB_MIGRATIONS 加一個
+// `[舊版本號]: (items) => 轉換後的items` 的函式即可，不會讓舊使用者的資料讀壞或消失。
+const CURRENT_LIB_SCHEMA_VERSION = 1;
+const LIB_MIGRATIONS = {
+  // 範例（尚未使用）： 2: (items) => items.map(it => ({...it, someNewField: ""}))
+};
+
+function migrateLibraryItems(fromVersion, items){
+  let v = fromVersion;
+  let out = items;
+  while (v < CURRENT_LIB_SCHEMA_VERSION){
+    const step = LIB_MIGRATIONS[v];
+    if (typeof step === "function") out = step(out);
+    v++;
+  }
+  return out;
+}
+
 function loadLibraryFromStorage(key){
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch (e){ return []; }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)){
+      // legacy 格式（無版本號的純陣列）：視為版本 1，跑一次遷移（目前版本=1所以不會做任何事，
+      // 但保留這個分支是為了未來版本升級時舊資料仍然讀得到）。
+      return migrateLibraryItems(1, parsed);
+    }
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)){
+      const fromV = Number.isFinite(parsed.v) ? parsed.v : 1;
+      return migrateLibraryItems(fromV, parsed.items);
+    }
+    return [];
+  } catch (e){
+    console.warn("讀取資料庫失敗，可能是儲存內容毀損：", key, e);
+    return [];
+  }
 }
+
+// 粗估這個 key 目前佔用的位元組數（localStorage 是 UTF-16，字元數*2估算）。
+function estimateKeyBytes(key){
+  const raw = localStorage.getItem(key);
+  return raw ? raw.length * 2 : 0;
+}
+const LIB_STORAGE_KEYS = () => [POSE_LIB_KEY, GESTURE_LIB_KEY, MOVE_LIB_KEY];
+// 大多數瀏覽器每個來源(origin)的 localStorage 上限落在 5–10MB，這裡保守抓 5MB 當警戒基準。
+const ESTIMATED_STORAGE_QUOTA_BYTES = 5 * 1024 * 1024;
+function formatBytes(n){
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/1024/1024).toFixed(2) + " MB";
+}
+function getTotalLibraryStorageBytes(){
+  return LIB_STORAGE_KEYS().reduce((sum, k) => sum + estimateKeyBytes(k), 0);
+}
+
 function saveLibraryToStorage(key, arr){
-  try { localStorage.setItem(key, JSON.stringify(arr)); }
-  catch (e){ console.warn("儲存庫寫入 localStorage 失敗：", e); alert("儲存失敗（瀏覽器儲存空間可能已滿）：" + e.message); }
+  const payload = JSON.stringify({ v: CURRENT_LIB_SCHEMA_VERSION, items: arr });
+  try {
+    localStorage.setItem(key, payload);
+    renderStorageUsageIndicator();
+    return true;
+  } catch (e){
+    console.warn("儲存庫寫入 localStorage 失敗：", e);
+    // 寫入失敗時（通常是空間已滿）：記憶體裡的 items 其實還在（呼叫端還沒重整頁面），
+    // 立刻自動幫使用者匯出一份 JSON 備份，避免這次的異動在重新整理後直接消失。
+    try {
+      downloadJSON(arr, "招式庫備份_寫入失敗_" + Date.now() + ".json");
+      alert("儲存空間已滿，這次的變更無法存進瀏覽器！\n已自動幫你匯出一份 JSON 備份到下載資料夾，請先用「匯出全部」清出一些舊招式（例如刪除不需要的、或匯出後在別的裝置匯入），再繼續使用。");
+    } catch (e2){
+      alert("儲存失敗（瀏覽器儲存空間可能已滿），且自動備份也失敗了：" + e.message + "\n建議立即手動使用「匯出全部」把目前看得到的內容存下來。");
+    }
+    renderStorageUsageIndicator();
+    return false;
+  }
+}
+
+// 在畫面上顯示目前姿勢庫／手勢庫／招式庫共用的 localStorage 用量，並在快滿時提早示警
+// （三個庫共用同一個瀏覽器儲存空間，所以用量要一起看，不能只看單一庫）。
+function renderStorageUsageIndicator(){
+  const el = document.getElementById("libStorageUsageHint");
+  if (!el) return;
+  const used = getTotalLibraryStorageBytes();
+  const pct = Math.min(100, Math.round(used / ESTIMATED_STORAGE_QUOTA_BYTES * 100));
+  el.textContent = `💾 姿勢／手勢／招式庫共用空間：約 ${formatBytes(used)}（估計上限約 5MB 的 ${pct}%）`;
+  el.style.color = pct >= 90 ? "#ff6b6b" : (pct >= 70 ? "#f0b060" : "#6a6a9a");
+  if (pct >= 90){
+    el.textContent += "　⚠ 空間快滿了，建議盡快匯出備份並刪除不需要的項目";
+  }
 }
 function downloadJSON(obj, filename){
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type:"application/json" });
@@ -4374,10 +4848,31 @@ function renderLibList(items, listElId, emptyElId, handlers){
 
     const sel = document.createElement("button");
     sel.className = "sel";
-    sel.textContent = item.name;
     sel.title = "套用「" + item.name + "」";
     sel.onclick = () => handlers.apply(item);
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "selName";
+    nameSpan.textContent = item.name;
+    sel.appendChild(nameSpan);
+    if (typeof handlers.subtitle === "function"){
+      const subText = handlers.subtitle(item);
+      if (subText){
+        const subSpan = document.createElement("span");
+        subSpan.className = "selSub";
+        subSpan.textContent = subText;
+        sel.appendChild(subSpan);
+      }
+    }
     chip.appendChild(sel);
+
+    if (typeof handlers.rename === "function"){
+      const ren = document.createElement("button");
+      ren.className = "ren";
+      ren.textContent = "✎";
+      ren.title = "重新命名「" + item.name + "」";
+      ren.onclick = (ev) => { ev.stopPropagation(); handlers.rename(item); };
+      chip.appendChild(ren);
+    }
 
     const exp = document.createElement("button");
     exp.className = "exp";
@@ -4397,24 +4892,50 @@ function renderLibList(items, listElId, emptyElId, handlers){
   });
 }
 
-// 工廠函式：產生一個獨立運作的「庫」控制器（姿勢庫／手勢庫各建一個實例，邏輯完全共用不重複寫）
+// 工廠函式：產生一個獨立運作的「庫」控制器（姿勢庫／手勢庫／招式庫各建一個實例，邏輯完全共用不重複寫）
 function createLibraryController(opts){
-  // opts: { storageKey, captureFn, applyFn, listElId, emptyElId, filePrefix, itemLabel }
+  // opts: { storageKey, captureFn, applyFn, listElId, emptyElId, filePrefix, itemLabel, subtitleFn? }
   let items = loadLibraryFromStorage(opts.storageKey);
+  let filterText = "";
 
   function persist(){ saveLibraryToStorage(opts.storageKey, items); }
 
   function render(){
-    renderLibList(items, opts.listElId, opts.emptyElId, {
-      apply: (item) => { opts.applyFn(item.data); pushHistory(); },
-      del: (item) => {
-        if (!confirm(`刪除${opts.itemLabel}「${item.name}」？此動作無法復原。`)) return;
-        items = items.filter(x => x.id !== item.id);
-        persist(); render();
-      },
-      exportOne: (item) => downloadJSON(item, opts.filePrefix + "_" + sanitizeFilename(item.name) + ".json")
-    });
+    const q = filterText.trim().toLowerCase();
+    const filtered = q ? items.filter(it => it.name.toLowerCase().includes(q)) : items;
+
+    if (filtered.length === 0 && items.length > 0){
+      // 清單本身不是空的，只是搜尋沒有結果——顯示不同提示，不要跟「從來沒存過」的空狀態混在一起
+      const host = document.getElementById(opts.listElId);
+      host.innerHTML = "";
+      const msg = document.createElement("span");
+      msg.className = "libEmpty";
+      msg.textContent = `沒有符合「${filterText.trim()}」的${opts.itemLabel}。`;
+      host.appendChild(msg);
+    } else {
+      renderLibList(filtered, opts.listElId, opts.emptyElId, {
+        apply: (item) => { opts.applyFn(item.data); pushHistory(); },
+        del: (item) => {
+          if (!confirm(`刪除${opts.itemLabel}「${item.name}」？此動作無法復原。`)) return;
+          items = items.filter(x => x.id !== item.id);
+          persist(); render();
+        },
+        exportOne: (item) => downloadJSON(item, opts.filePrefix + "_" + sanitizeFilename(item.name) + ".json"),
+        subtitle: opts.subtitleFn,
+        rename: (item) => {
+          const next = prompt(`重新命名「${item.name}」為：`, item.name);
+          if (next === null) return; // 使用者取消
+          const clean = next.trim();
+          if (!clean){ alert("名稱不能是空的。"); return; }
+          item.name = clean;
+          persist(); render();
+        }
+      });
+    }
+    if (typeof opts.onRender === "function") opts.onRender(items.length);
   }
+
+  function setFilter(text){ filterText = text || ""; render(); }
 
   function saveCurrent(name){
     const clean = (name || "").trim() || ("未命名" + opts.itemLabel);
@@ -4450,7 +4971,13 @@ function createLibraryController(opts){
     });
   }
 
-  return { render, saveCurrent, exportAll, importOne, importAll };
+  function saveData(name, data){
+    const clean = (name || "").trim() || ("未命名" + opts.itemLabel);
+    items.push({ id: makeLibId(), name: clean, savedAt: Date.now(), data });
+    persist(); render();
+  }
+
+  return { render, saveCurrent, saveData, exportAll, importOne, importAll, setFilter, getItems: () => items.slice() };
 }
 
 // -- 動作姿勢庫：只讀寫身體關節（BODY_LIB_JOINT_KEYS），完全不碰手指 --
@@ -4480,8 +5007,147 @@ function applyGestureData(data){
   updateSelectedBar();
 }
 
+// -- 招式庫清單的輔助顯示：拍數／預估秒數／儲存時間，讓使用者不用點開就知道這招大概是什麼 --
+function formatRelativeSavedTime(ts){
+  if (!ts) return "";
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return "剛剛";
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return diffMin + "分鐘前";
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return diffHr + "小時前";
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 30) return diffDay + "天前";
+  const d = new Date(ts);
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+function moveLibSubtitle(item){
+  const frames = (item.data && Array.isArray(item.data.frames)) ? item.data.frames : [];
+  const frameCount = frames.length;
+  const totalBeats = frames.reduce((s, f) => s + (f && f.beats ? f.beats : 1), 0);
+  // 用目前的 BPM 換算預估秒數；如果之後 BPM 改了，實際套用時長度會跟著新 BPM 走，這裡只是抓個大概。
+  const ms = Math.round((60000 / bpm) * totalBeats);
+  const sec = (ms / 1000).toFixed(1);
+  const when = formatRelativeSavedTime(item.savedAt);
+  return `${frameCount}拍・約${sec}秒${when ? "・" + when : ""}`;
+}
+
+// -- 招式庫：存「時間軸上一小段連續拍點」（一組動作組合），套用方式是「插入」而非「覆蓋」--
+const MOVE_LIB_KEY = "tuttingMoveLibrary_v1";
+
+// 讀「起始拍／結束拍」輸入框（1-based，對應畫面上的 F1、F2……），擷取那段拍點深拷貝存起來，
+// 之後即使原本時間軸被編輯，已存的招式也不會被連動改到。
+function captureSelectedMove(){
+  const total = keyframes.length;
+  if (total === 0){ alert("目前時間軸沒有任何拍點，請先到「拍點」分頁排好動作。"); return null; }
+  const startEl = document.getElementById("moveLibStartInput");
+  const endEl = document.getElementById("moveLibEndInput");
+  let a = parseInt(startEl.value, 10);
+  let b = parseInt(endEl.value, 10);
+  if (!Number.isFinite(a) || !Number.isFinite(b)){
+    alert("請輸入有效的起始拍與結束拍（例如 1、4）。"); return null;
+  }
+  if (a > b) { const t = a; a = b; b = t; }
+  a = Math.max(1, Math.min(a, total));
+  b = Math.max(1, Math.min(b, total));
+  const frames = JSON.parse(JSON.stringify(keyframes.slice(a - 1, b)));
+  if (frames.length === 0) return null;
+  return { frames };
+}
+
+// 插入到「目前選取拍點」之後；若沒有選取任何拍點，就接在整份編舞最尾端（方便依序把招式串成一整支舞）。
+// 每次插入都重新深拷貝一份，避免同一招式插入兩次時，兩處拍點共用同一個物件參考。
+function insertMoveData(data){
+  if (!data || !Array.isArray(data.frames) || data.frames.length === 0){
+    alert("這個招式資料格式錯誤或是空的。"); return;
+  }
+  const cloned = JSON.parse(JSON.stringify(data.frames));
+  const insertAt = (kfEditingIndex >= 0 && kfEditingIndex < keyframes.length) ? kfEditingIndex + 1 : keyframes.length;
+  keyframes.splice(insertAt, 0, ...cloned);
+  kfEditingIndex = insertAt + cloned.length - 1;
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+function updateMoveLibRangeHint(){
+  const hint = document.getElementById("moveLibRangeHint");
+  if (hint) hint.textContent = `（目前時間軸共 ${keyframes.length} 拍）`;
+}
+
+// 直接把一組拍點推到時間軸最尾端（批次生成排舞用，不動 kfEditingIndex，效能較好，最後統一 render 一次）。
+function appendMoveFrames(frames){
+  const cloned = JSON.parse(JSON.stringify(frames));
+  keyframes.push(...cloned);
+}
+
+// 從招式庫隨機抽 N 個招式接龍成一份排舞。replace=true 會先清空目前時間軸，false 則接在尾端繼續往後長。
+function generateChoreographyFromMoves(replace){
+  const items = moveLibCtrl.getItems();
+  if (items.length === 0){ alert("招式庫目前是空的，請先在上面儲存至少一個招式。"); return; }
+
+  const countEl = document.getElementById("moveGenCountInput");
+  let count = parseInt(countEl.value, 10);
+  if (!Number.isFinite(count) || count < 1) count = 1;
+  count = Math.min(count, 50);
+  const allowRepeat = document.getElementById("moveGenAllowRepeatChk").checked;
+
+  if (replace){
+    if (keyframes.length > 0 && !confirm("這會清空目前時間軸上所有拍點，改用招式庫隨機生成一份新的，確定嗎？")) return;
+    keyframes = [];
+  }
+
+  let lastId = null;
+  for (let i = 0; i < count; i++){
+    let pick;
+    if (items.length === 1 || allowRepeat){
+      pick = items[Math.floor(Math.random() * items.length)];
+    } else {
+      const pool = items.filter(x => x.id !== lastId); // 避免連續兩段選到同一招式
+      pick = pool[Math.floor(Math.random() * pool.length)];
+    }
+    lastId = pick.id;
+    if (pick.data && Array.isArray(pick.data.frames) && pick.data.frames.length > 0){
+      appendMoveFrames(pick.data.frames);
+    }
+  }
+
+  kfEditingIndex = keyframes.length - 1;
+  stopKeyframePlayback();
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+  scheduleAutoSave();
+  pushHistory();
+}
+
+// 自動生成招式：連續呼叫 N 次既有的「動作生成」（沿用關節限制範圍／Isolation分組／機率設定），
+// 每呼叫一次就記錄一格拍點快照，串成一個多拍的招式；只存進招式庫，不會動到目前時間軸上的內容。
+function autoGenerateMove(frameCount){
+  const eligibleKeys = JOINT_LIMIT_KEYS.filter(key => {
+    if (!bones[key]) return false;
+    const lim = JOINT_LIMITS[key];
+    return lim.x.enabled || lim.y.enabled || lim.z.enabled;
+  });
+  if (eligibleKeys.length === 0){
+    alert("目前沒有任何關節啟用限制範圍，請先到「關節限制」分頁至少設定一個關節的角度限制，才有範圍可以自動生成。");
+    return null;
+  }
+  const frames = [];
+  for (let i = 0; i < frameCount; i++){
+    generateRandomPose(); // 沿用關節限制/Isolation設定隨機擺一個姿勢
+    frames.push({
+      angles: snapshotCurrentAngles(),
+      body: snapshotBodyTransform(),
+      easing: kfPendingEasing,
+      beats: kfPendingBeats
+    });
+  }
+  return frames;
+}
+
 let poseLibCtrl = null;
 let gestureLibCtrl = null;
+let moveLibCtrl = null;
 
 function bindLibraryUI(){
   poseLibCtrl = createLibraryController({
@@ -4517,8 +5183,61 @@ function bindLibraryUI(){
   document.getElementById("gestureLibImportOneBtn").onclick = () => document.getElementById("gestureLibImportOneFile").click();
   document.getElementById("gestureLibImportOneFile").onchange = (e) => { gestureLibCtrl.importOne(e.target.files[0]); e.target.value = ""; };
 
+  moveLibCtrl = createLibraryController({
+    storageKey: MOVE_LIB_KEY, captureFn: captureSelectedMove, applyFn: insertMoveData,
+    listElId: "moveLibList", emptyElId: "moveLibEmpty", filePrefix: "招式", itemLabel: "招式",
+    subtitleFn: moveLibSubtitle,
+    onRender: (count) => {
+      const badge = document.getElementById("moveLibCount");
+      if (badge) badge.textContent = count;
+    }
+  });
+  const moveSearchInput = document.getElementById("moveLibSearchInput");
+  if (moveSearchInput) moveSearchInput.addEventListener("input", () => moveLibCtrl.setFilter(moveSearchInput.value));
+
+  const moveNameInput = document.getElementById("moveLibNameInput");
+  document.getElementById("moveLibSaveBtn").onclick = () => {
+    moveLibCtrl.saveCurrent(moveNameInput.value);
+    moveNameInput.value = "";
+  };
+  moveNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("moveLibSaveBtn").click(); });
+  document.getElementById("moveLibExportAllBtn").onclick = () => moveLibCtrl.exportAll();
+  document.getElementById("moveLibImportAllBtn").onclick = () => document.getElementById("moveLibImportAllFile").click();
+  document.getElementById("moveLibImportAllFile").onchange = (e) => { moveLibCtrl.importAll(e.target.files[0]); e.target.value = ""; };
+  document.getElementById("moveLibImportOneBtn").onclick = () => document.getElementById("moveLibImportOneFile").click();
+  document.getElementById("moveLibImportOneFile").onchange = (e) => { moveLibCtrl.importOne(e.target.files[0]); e.target.value = ""; };
+
+  document.getElementById("moveLibUseCurAsStartBtn").onclick = () => {
+    if (kfEditingIndex < 0){ alert("請先到「拍點」分頁點選一個拍點。"); return; }
+    document.getElementById("moveLibStartInput").value = kfEditingIndex + 1;
+  };
+  document.getElementById("moveLibUseCurAsEndBtn").onclick = () => {
+    if (kfEditingIndex < 0){ alert("請先到「拍點」分頁點選一個拍點。"); return; }
+    document.getElementById("moveLibEndInput").value = kfEditingIndex + 1;
+  };
+
+  updateMoveLibRangeHint();
+  document.getElementById("moveGenAppendBtn").onclick = () => generateChoreographyFromMoves(false);
+  document.getElementById("moveGenReplaceBtn").onclick = () => generateChoreographyFromMoves(true);
+
+  document.getElementById("moveAutoGenBtn").onclick = () => {
+    const countEl = document.getElementById("moveAutoGenFrameCountInput");
+    let n = parseInt(countEl.value, 10);
+    if (!Number.isFinite(n) || n < 2) n = 2;
+    n = Math.min(n, 12);
+    const frames = autoGenerateMove(n);
+    if (!frames) return;
+    const nameEl = document.getElementById("moveAutoGenNameInput");
+    const name = (nameEl.value || "").trim() || `自動招式_${moveLibCtrl.getItems().length + 1}`;
+    moveLibCtrl.saveData(name, { frames });
+    nameEl.value = "";
+    updateSelectedBar();
+  };
+
   poseLibCtrl.render();
   gestureLibCtrl.render();
+  moveLibCtrl.render();
+  renderStorageUsageIndicator();
 }
 
 // ---- 鏡像（左右對稱姿勢）----
@@ -4749,6 +5468,7 @@ function snapshotTimelineData(){
     keyframes,
     trajPoints: {},
     trajMode: TRAJ_MODE,
+    trajClosed: TRAJ_CLOSED,
     bpm,
     kfPendingEasing,
     kfPendingBeats,
@@ -4793,6 +5513,9 @@ function restoreTimelineData(data){
   keyframes = data.keyframes;
   kfEditingIndex = keyframes.length > 0 ? 0 : -1;
   if (data.trajMode) Object.assign(TRAJ_MODE, data.trajMode);
+  // 舊版（沒有封閉路徑功能）存的資料沒有這個欄位：Object.assign不到就維持目前值（預設false），
+  // 不會憑空冒出使用者從沒設定過的封閉路徑，跟trajMode同一套處理方式。
+  if (data.trajClosed) Object.assign(TRAJ_CLOSED, data.trajClosed);
   if (typeof data.bpm === "number") bpm = data.bpm;
   if (data.kfPendingEasing) kfPendingEasing = data.kfPendingEasing;
   if (typeof data.kfPendingBeats === "number") kfPendingBeats = data.kfPendingBeats;
@@ -4943,11 +5666,131 @@ function applyBodyTransform(bodyData){
   model.updateWorldMatrix(true, true);
 }
 
+// 「+ 新增拍點」：若目前有選取某個拍點，插入在它後面（方便在中間補一拍）；
+// 沒有選取（例如剛清空、或使用者按了 Esc 取消選取）則加到最尾端。
+// 依序連續新增時，每次新增後 kfEditingIndex 都會指向剛新增的那個（也就是最後一個），
+// 所以下一次新增仍然等同「加到最尾端」，原本的操作習慣不會被打斷。
 function addKeyframe(){
-  keyframes.push({ angles: snapshotCurrentAngles(), body: snapshotBodyTransform(), easing: kfPendingEasing, beats: kfPendingBeats });
-  kfEditingIndex = keyframes.length - 1;
+  const newKf = { angles: snapshotCurrentAngles(), body: snapshotBodyTransform(), easing: kfPendingEasing, beats: kfPendingBeats };
+  if (kfEditingIndex >= 0 && kfEditingIndex < keyframes.length){
+    keyframes.splice(kfEditingIndex + 1, 0, newKf);
+    kfEditingIndex = kfEditingIndex + 1;
+  } else {
+    keyframes.push(newKf);
+    kfEditingIndex = keyframes.length - 1;
+  }
   renderKeyframeChips();
   scheduleAutoSave();
+}
+
+// 複製第 i 個拍點（含角度、身體位置、Easing/拍數、軌跡資料），插入緊接在它後面。
+// 用深拷貝，複製出來的拍點之後各自修改不會互相影響。
+function duplicateKeyframe(i){
+  if (i < 0 || !keyframes[i]) return;
+  const copy = JSON.parse(JSON.stringify(keyframes[i]));
+  keyframes.splice(i + 1, 0, copy);
+  kfEditingIndex = i + 1;
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+// 拖曳排序：把 from 移到 to 的位置。跟著調整 kfEditingIndex，讓選取狀態黏著在
+// 「同一個邏輯拍點」上，而不是黏著在原本的數字位置上（否則拖曳完選取會跳到別的拍點去）。
+function reorderKeyframe(from, to){
+  if (from < 0 || from >= keyframes.length || to < 0 || to >= keyframes.length || from === to) return;
+  const [item] = keyframes.splice(from, 1);
+  keyframes.splice(to, 0, item);
+  if (kfEditingIndex === from) kfEditingIndex = to;
+  else if (from < kfEditingIndex && kfEditingIndex <= to) kfEditingIndex -= 1;
+  else if (to <= kfEditingIndex && kfEditingIndex < from) kfEditingIndex += 1;
+  renderKeyframeChips();
+  scheduleAutoSave();
+  pushHistory();
+}
+
+// 拍點備註：用 prompt() 編輯，跟既有的「姿勢庫／手勢庫」重新命名同一套互動方式。
+// 留空即清除備註（chip 上改顯示 ✎ 提示可以新增）。長度限制24字，避免橫向清單被一則超長備註撐爆。
+function renameKeyframeLabel(i){
+  if (!keyframes[i]) return;
+  const current = keyframes[i].label || "";
+  const next = prompt("拍點備註（例如「插腰」「收拍」），留空即可清除：", current);
+  if (next === null) return; // 使用者按取消，不變動
+  const trimmed = next.trim().slice(0, 24);
+  if (trimmed) keyframes[i].label = trimmed; else delete keyframes[i].label;
+  renderKeyframeChips();
+  scheduleAutoSave();
+}
+
+// 拍點清單標題旁的總時長：只加總「有下一段轉場」的拍點（最後一拍沒有輸出轉場，不計入），
+// 算法跟 updateBeatMsHint() 單一拍點的算法一致，這裡是整份時間軸的加總。
+function updateKfTotalDurationLabel(){
+  const el = document.getElementById("kfTotalDuration");
+  if (!el) return;
+  if (keyframes.length < 2){ el.textContent = keyframes.length === 1 ? "1 拍" : ""; return; }
+  let totalMs = 0;
+  for (let i = 0; i < keyframes.length - 1; i++){
+    totalMs += (60000 / bpm) * (keyframes[i].beats || 1);
+  }
+  el.textContent = `共 ${keyframes.length} 拍・約 ${(totalMs / 1000).toFixed(1)} 秒（${bpm} BPM）`;
+}
+
+// ---- 多選批次刪除 ----
+function updateKfMultiSelectBar(){
+  const bar = document.getElementById("kfMultiSelectBar");
+  const btn = document.getElementById("kfMultiSelectBtn");
+  const countEl = document.getElementById("kfMultiSelectCount");
+  const delBtn = document.getElementById("kfMultiSelectDeleteBtn");
+  if (btn) btn.classList.toggle("active", kfMultiSelectMode);
+  if (bar) bar.style.display = kfMultiSelectMode ? "inline-flex" : "none";
+  if (countEl) countEl.textContent = `已選 ${kfMultiSelected.size} 個`;
+  if (delBtn) delBtn.disabled = kfMultiSelected.size === 0;
+}
+
+function setKfMultiSelectMode(on){
+  kfMultiSelectMode = on;
+  kfMultiSelected.clear();
+  if (on){
+    kfEditingIndex = -1; // 進入多選模式時清空單選狀態，避免「更新/刪除選取拍點」等單選操作作用在畫面上已經看不到高亮的舊選取上
+    syncEasingControlsFromSelection();
+    if (kfPlaying) stopKeyframePlayback(); // 播放中不支援多選勾選，直接停下來避免混淆
+  }
+  updateKfMultiSelectBar();
+  renderKeyframeChips();
+}
+
+function toggleKfMultiSelectItem(i){
+  if (kfMultiSelected.has(i)) kfMultiSelected.delete(i); else kfMultiSelected.add(i);
+  updateKfMultiSelectBar();
+  renderKeyframeChips();
+}
+
+function kfMultiSelectAll(){
+  kfMultiSelected = new Set(keyframes.map((_, i) => i));
+  updateKfMultiSelectBar();
+  renderKeyframeChips();
+}
+
+function kfMultiSelectNone(){
+  kfMultiSelected.clear();
+  updateKfMultiSelectBar();
+  renderKeyframeChips();
+}
+
+// 批次刪除已勾選的拍點：由大到小排序後逐一 splice，避免刪除過程中前面的索引位移影響後面還沒刪到的索引。
+function deleteKfMultiSelected(){
+  if (kfMultiSelected.size === 0) return;
+  const indices = Array.from(kfMultiSelected).sort((a, b) => b - a);
+  const ok = confirm(`確定要刪除已勾選的 ${indices.length} 個拍點嗎？此動作可用 Ctrl+Z 復原。`);
+  if (!ok) return;
+  for (const idx of indices) keyframes.splice(idx, 1);
+  kfEditingIndex = -1;
+  kfMultiSelected.clear();
+  if (kfPlaying && keyframes.length < 2) stopKeyframePlayback();
+  updateKfMultiSelectBar();
+  syncEasingControlsFromSelection();
+  renderKeyframeChips();
+  scheduleAutoSave();
+  pushHistory();
 }
 
 function updateKeyframe(){
@@ -5002,7 +5845,10 @@ function updateBeatMsHint(){
 
 function deleteKeyframe(i){
   keyframes.splice(i, 1);
-  if (kfEditingIndex >= keyframes.length) kfEditingIndex = keyframes.length - 1;
+  // 選取的拍點被刪了：改選同一個位置的下一個（沒有的話往前一個）；
+  // 選取的拍點還在但排在被刪除的後面：索引要跟著往前移一格，否則選取會跳到別的拍點身上。
+  if (kfEditingIndex === i) kfEditingIndex = Math.min(i, keyframes.length - 1);
+  else if (kfEditingIndex > i) kfEditingIndex -= 1;
   if (kfPlaying && keyframes.length < 2) stopKeyframePlayback();
   syncEasingControlsFromSelection();
   renderKeyframeChips();
@@ -5028,12 +5874,26 @@ function selectKeyframe(i){
 // 建立/重建整份拍點清單的 DOM（結構性變動才呼叫：新增、刪除、清空、選取、Easing/拍數變更……）。
 // 播放中每幀要做的「高亮目前播放到哪一拍」不要走這裡——見下面的 updatePlayingKeyframeHighlight()，
 // 否則等於每秒 60 次 innerHTML="" 整份重建 + 重新產生 easing SVG，會造成明顯卡頓。
+// 拍點清單改成單列橫向捲動後，拍點一多，目前選取/播放中的那一格很容易在可視範圍外，
+// 統一用這個小工具捲進畫面（inline:"nearest" 表示已經在可視範圍內就不會多此一舉地捲動）。
+function scrollKfChipIntoView(i){
+  const chip = kfChipEls[i];
+  if (chip) chip.scrollIntoView({ behavior:"smooth", inline:"nearest", block:"nearest" });
+}
+
 function renderKeyframeChips(){
+  updateMoveLibRangeHint();
+  updateKfTotalDurationLabel(); // 不管清單是否為空都要更新（空清單/只有1拍時顯示空字串）
   const host = document.getElementById("kfList");
-  const empty = document.getElementById("kfEmpty");
   host.innerHTML = "";
   kfChipEls = [];
   if (keyframes.length === 0){
+    // 動態建立空清單提示文字，不依賴靜態 #kfEmpty 節點——
+    // 該節點一旦在非空清單時被 host.innerHTML="" 清掉就永久脫離DOM，
+    // 之後 getElementById 回傳 null，host.appendChild(null) 會拋例外中斷整個函式（已修正的舊bug）。
+    const empty = document.createElement("span");
+    empty.id = "kfEmpty";
+    empty.textContent = "尚未新增任何拍點——先用關節控制環擺出第一個姿勢，再按「+ 新增拍點」";
     host.appendChild(empty);
     updateOnionSkins();
     drawKfWaveform();
@@ -5042,13 +5902,63 @@ function renderKeyframeChips(){
   keyframes.forEach((kf, i) => {
     const chip = document.createElement("div");
     chip.className = "kfChip";
-    if (i === kfEditingIndex) chip.classList.add("active");
+    if (!kfMultiSelectMode && i === kfEditingIndex) chip.classList.add("active");
+    if (kfMultiSelectMode && kfMultiSelected.has(i)) chip.classList.add("multiChecked");
     if (kfPlaying && i === kfIndex) chip.classList.add("playing");
+
+    // ---- 拖曳排序：整張 chip 可拖曳，拖到誰身上就插入到誰的位置
+    // （播放中／多選模式下停用，避免跟播放狀態或勾選手勢打架）----
+    chip.draggable = !kfPlaying && !kfMultiSelectMode;
+    chip.addEventListener("dragstart", (ev) => {
+      if (kfPlaying || kfMultiSelectMode){ ev.preventDefault(); return; }
+      kfDragSrcIndex = i;
+      chip.classList.add("dragging");
+      ev.dataTransfer.effectAllowed = "move";
+      ev.dataTransfer.setData("text/plain", String(i)); // 部分瀏覽器要求呼叫 setData 才會真的啟動拖曳
+    });
+    chip.addEventListener("dragend", () => {
+      chip.classList.remove("dragging");
+      kfDragSrcIndex = -1;
+      for (const el of kfChipEls) if (el) el.classList.remove("dragOver");
+    });
+    chip.addEventListener("dragover", (ev) => {
+      if (kfDragSrcIndex < 0) return;
+      ev.preventDefault(); // 一定要呼叫，瀏覽器預設不允許 drop
+      ev.dataTransfer.dropEffect = "move";
+      chip.classList.add("dragOver");
+    });
+    chip.addEventListener("dragleave", () => chip.classList.remove("dragOver"));
+    chip.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      chip.classList.remove("dragOver");
+      reorderKeyframe(kfDragSrcIndex, i);
+    });
+
+    // 多選模式：chip 最前面加一個勾選方塊，視覺上提示目前處於「勾選拍點準備批次刪除」的狀態
+    if (kfMultiSelectMode){
+      const check = document.createElement("span");
+      check.className = "kfCheckMark";
+      check.textContent = "✓";
+      chip.appendChild(check);
+    }
 
     const sel = document.createElement("button");
     sel.className = "sel";
     sel.textContent = `F${i+1}`;
-    sel.onclick = () => selectKeyframe(i);
+    sel.setAttribute("data-tooltip", kfMultiSelectMode ? "點擊勾選／取消勾選" : "點擊套用這個拍點的姿勢");
+    sel.onclick = () => { if (kfMultiSelectMode) toggleKfMultiSelectItem(i); else selectKeyframe(i); };
+
+    const labelBtn = document.createElement("button");
+    labelBtn.className = "kfLabelBtn" + (kf.label ? " hasLabel" : "");
+    labelBtn.textContent = kf.label ? kf.label : "✎";
+    labelBtn.setAttribute("data-tooltip", kf.label ? `備註：${kf.label}（點擊編輯／清空）` : "點擊新增備註（例如「插腰」「收拍」）");
+    labelBtn.onclick = (ev) => { ev.stopPropagation(); renameKeyframeLabel(i); };
+
+    const dup = document.createElement("button");
+    dup.className = "dup";
+    dup.textContent = "⧉";
+    dup.setAttribute("data-tooltip", "複製此拍點（插入在後面）");
+    dup.onclick = (ev) => { ev.stopPropagation(); duplicateKeyframe(i); pushHistory(); };
 
     const del = document.createElement("button");
     del.className = "del";
@@ -5056,6 +5966,7 @@ function renderKeyframeChips(){
     del.onclick = (ev) => { ev.stopPropagation(); deleteKeyframe(i); pushHistory(); };
 
     chip.appendChild(sel);
+    chip.appendChild(labelBtn);
 
     // 若這個拍點是「生成拍點（軌跡）」批次寫入的，加一個小標籤提示（滑鼠移上去看是哪些肢體）
     if (kf.traj && Object.keys(kf.traj).length > 0){
@@ -5077,12 +5988,17 @@ function renderKeyframeChips(){
       chip.appendChild(easeTag);
     }
 
-    chip.appendChild(del);
+    // 多選模式下隱藏複製/刪除單顆的按鈕，減少視覺干擾、避免跟批次刪除的操作混在一起搞混
+    if (!kfMultiSelectMode){
+      chip.appendChild(dup);
+      chip.appendChild(del);
+    }
     host.appendChild(chip);
     kfChipEls[i] = chip;
   });
   updateOnionSkins();
   drawKfWaveform(); // 拍點增刪/拍數/easing變動都會影響橘色參考線在音樂上的位置，這裡統一重畫
+  if (!kfMultiSelectMode && kfEditingIndex >= 0) scrollKfChipIntoView(kfEditingIndex); // 新增/選取/改易入拍點時，確保它在單列時間軸的可視範圍內
 }
 
 // 播放時每幀呼叫：只切換既有 chip 節點的 "playing" class，不重建 DOM、不重新產生 SVG。
@@ -5092,6 +6008,59 @@ function updatePlayingKeyframeHighlight(){
     const chip = kfChipEls[i];
     if (chip) chip.classList.toggle("playing", kfPlaying && i === kfIndex);
   }
+}
+
+// 拍點清單改成單列橫向排列後，一般滑鼠的垂直滾輪天生滾不動橫向內容（要按住 Shift 才行，
+// 多數使用者不會這樣做）；這裡把垂直滾動量轉成橫向捲動，滑鼠使用者可以直接滾。
+// 觸控板本來就常支援直接橫向滑動（deltaX），那種情況交給瀏覽器原生處理，不要搶著轉換。
+function initKfListWheelScroll(){
+  const list = document.getElementById("kfList");
+  if (!list) return;
+  list.addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    list.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive:false });
+}
+
+// 拍點清單鍵盤快捷鍵：只在「時間軸」分頁作用中、且沒有正在某個輸入框打字時生效，
+// 避免跟其他分頁操作或打字輸入互相搶按鍵。播放中也不接管，避免跟播放狀態衝突。
+// ←/→：切換選取上一拍/下一拍　Delete/Backspace：刪除選取中的拍點　Ctrl/Cmd+D：複製選取中的拍點
+function bindKfKeyboardShortcuts(){
+  window.addEventListener("keydown", (e) => {
+    const t = e.target;
+    const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+    if (typing || kfPlaying || !isKeyframeTabActive()) return;
+
+    // 多選模式下，←/→切換選取跟 Ctrl+D複製都沒有明確意義（多選沒有「唯一選取中」的拍點），
+    // 只保留 Delete/Backspace，行為改成刪除目前已勾選的全部拍點。
+    if (kfMultiSelectMode){
+      if (e.key === "Delete" || e.key === "Backspace"){
+        if (kfMultiSelected.size === 0) return;
+        e.preventDefault();
+        deleteKfMultiSelected();
+      }
+      return;
+    }
+
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight"){
+      if (keyframes.length === 0) return;
+      e.preventDefault();
+      let next = kfEditingIndex < 0 ? 0 : kfEditingIndex + (e.key === "ArrowRight" ? 1 : -1);
+      next = Math.max(0, Math.min(keyframes.length - 1, next));
+      selectKeyframe(next);
+    } else if (e.key === "Delete" || e.key === "Backspace"){
+      if (kfEditingIndex < 0) return;
+      e.preventDefault();
+      deleteKeyframe(kfEditingIndex);
+      pushHistory();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d"){
+      if (kfEditingIndex < 0) return;
+      e.preventDefault();
+      duplicateKeyframe(kfEditingIndex);
+      pushHistory();
+    }
+  });
 }
 
 function toggleKeyframePlayback(){
@@ -5112,6 +6081,7 @@ function toggleKeyframePlayback(){
   document.getElementById("kfPlayBtn").classList.add("playing");
   document.getElementById("kfPlayBtn").textContent = "■ 停止拍點";
   updateOnionSkins(); // 立刻依 kfIndex=0 顯示第一段過渡的殘影，不用等到跨到下一拍才出現
+  scrollKfChipIntoView(0); // 單列時間軸：開始播放時先捲回第一拍，避免使用者剛才把清單捲到別處
 }
 
 function stopKeyframePlayback(){
@@ -5580,7 +6550,7 @@ function applyTrajOverridesDuringPlayback(limbs, frameA, frameB, et){
     // 關鍵：這裡讀到的必須是「本幀剛套用完軀幹FK/身體位置之後」的最新世界座標，
     // 呼叫端已在此之前手動跑過 model.updateMatrixWorld(true)，見 updateKeyframePlayback。
     const rootPos = _tpRootPos; rootBone.getWorldPosition(rootPos);
-    const localOffset = sampleTrajectoryFromPoints(mode, trajA.points, curT); // 內部自行配置，屬低頻呼叫（每肢體每幀一次）不特別處理
+    const localOffset = sampleTrajectoryFromPoints(mode, trajA.points, curT, !!trajA.closed); // 內部自行配置，屬低頻呼叫（每肢體每幀一次）不特別處理；舊資料沒有closed欄位時預設false
     const targetPos = _tpTargetPos.copy(rootPos).add(localOffset);
 
     const poleA = _tpPoleA.set(trajA.pole.x, trajA.pole.y, trajA.pole.z);
@@ -6111,6 +7081,7 @@ function updateKeyframePlayback(now){
     grooveSquatAnchored = false; // 蹲彈的「原地錨點」跟著換到新一段的站位重新捕捉，
                                  // 不再整段編舞鎖死在播放開始那一刻的第一拍站位。
     updateOnionSkins(); // 換到新的過渡區段了，殘影要跟著往前挪一格（見 updateOnionSkinsForPlayback）
+    scrollKfChipIntoView(kfIndex); // 單列時間軸：每次跨拍把新的目前拍點捲進可視範圍
   }
 
   const easeFn = EASINGS[frameA.easing] || EASINGS.linear;
@@ -6157,21 +7128,6 @@ function bindTopUI(){
     transformControls.setRotationSnap(deg > 0 ? D(deg) : null);
   };
 
-  const showBodyJointsChk = document.getElementById("showBodyJointsChk");
-  if (showBodyJointsChk){
-    showBodyJointsChk.checked = showBodyJoints;
-    showBodyJointsChk.onchange = (e) => setJointCategoryVisible("body", e.target.checked);
-  }
-  const showHandJointsChk = document.getElementById("showHandJointsChk");
-  if (showHandJointsChk){
-    showHandJointsChk.checked = showHandJoints;
-    showHandJointsChk.onchange = (e) => setJointCategoryVisible("hand", e.target.checked);
-  }
-  const showSkeletonChk = document.getElementById("showSkeletonChk");
-  if (showSkeletonChk){
-    showSkeletonChk.checked = showSkeleton;
-    showSkeletonChk.onchange = (e) => { showSkeleton = e.target.checked; };
-  }
 
   document.getElementById("applyJsonBtn").onclick = () => { if (applyJson()) pushHistory(); };
   document.getElementById("copyJsonBtn").onclick = () => {
@@ -6182,11 +7138,16 @@ function bindTopUI(){
   };
 
   document.getElementById("kfPlayBtn").onclick = toggleKeyframePlayback;
-  document.getElementById("kfLoopChk").onchange = (e) => { kfLoop = e.target.checked; };
-  const onionChk = document.getElementById("onionSkinChk");
-  if (onionChk){
-    onionChk.checked = onionSkinEnabled;
-    onionChk.onchange = (e) => { onionSkinEnabled = e.target.checked; updateOnionSkins(); };
+  const kfLoopBtn = document.getElementById("kfLoopBtn");
+  kfLoopBtn.classList.toggle("active", kfLoop); // 圖示按鈕改用 active class 表示目前是否為循環播放狀態，跟其他切換按鈕（如手指 IK）同一套視覺語言
+  kfLoopBtn.onclick = () => {
+    kfLoop = !kfLoop;
+    kfLoopBtn.classList.toggle("active", kfLoop);
+  };
+  const onionChkDisplay = document.getElementById("onionSkinChkDisplay");
+  if (onionChkDisplay){
+    onionChkDisplay.checked = onionSkinEnabled;
+    onionChkDisplay.onchange = (e) => { onionSkinEnabled = e.target.checked; updateOnionSkins(); };
   }
   bindGrooveUI();
   const kfMusicWaveformDetails = document.getElementById("kfMusicWaveformDetails");
@@ -6199,8 +7160,11 @@ function bindTopUI(){
   }
   document.getElementById("kfAddBtn").onclick = () => { addKeyframe(); pushHistory(); };
   document.getElementById("kfUpdateBtn").onclick = () => { updateKeyframe(); pushHistory(); };
-  document.getElementById("kfDeleteBtn").onclick = () => { if (kfEditingIndex >= 0){ deleteKeyframe(kfEditingIndex); pushHistory(); } };
-  document.getElementById("kfClearBtn").onclick = () => { clearKeyframes(); pushHistory(); };
+  document.getElementById("kfMultiSelectBtn").onclick = () => setKfMultiSelectMode(!kfMultiSelectMode);
+  document.getElementById("kfMultiSelectAllBtn").onclick = kfMultiSelectAll;
+  document.getElementById("kfMultiSelectNoneBtn").onclick = kfMultiSelectNone;
+  document.getElementById("kfMultiSelectDeleteBtn").onclick = deleteKfMultiSelected;
+  updateKfMultiSelectBar();
   document.getElementById("kfExportBtn").onclick = exportTimeline;
   document.getElementById("kfImportBtn").onclick = () => document.getElementById("kfImportFile").click();
   document.getElementById("kfImportFile").onchange = (e) => {
@@ -6223,6 +7187,8 @@ function bindTopUI(){
   document.getElementById("kfMusicPreviewBtn").onclick = toggleKfMusicPreview;
   ["play", "pause", "ended"].forEach(evt => document.getElementById("kfAudioEl").addEventListener(evt, syncKfMusicPreviewBtn));
   document.getElementById("kfTapTempoBtn").onclick = handleTapTempo;
+  initKfListWheelScroll();
+  bindKfKeyboardShortcuts();
   bindKfWaveformScrubbing();
   document.getElementById("kfWaveformZoomSlider").oninput = (e) => {
     setKfWaveformZoom(parseFloat(e.target.value));
@@ -6254,6 +7220,7 @@ function bindTopUI(){
   initUIVisibility();
   initUIResize();
   initUIFloat();
+  initFingerFloatPanel();
   bindIKUI();
   bindGrabBoxUI();
   bindTrajUI();
@@ -6263,6 +7230,55 @@ function bindTopUI(){
   bindLibraryUI();
   bindOverviewUI();
   bindJsonRefUI();
+  initDisplayTogglesPanel();
+  initPerfPanel();
+}
+
+// ======================================================================
+// 顯示設定小面板：身體/手部關節球、骨架、碰撞可視化，整合成一個浮在畫面左上角的獨立面板
+// （跟右上角「分割視窗」預覽同樣是疊在3D畫面上的浮動面板），可收合避免長期擋住畫面。
+// 收合狀態存 localStorage，跟其他面板（分割視窗開啟項目、UI浮動位置等）同一套持久化模式。
+// ======================================================================
+const DISPLAY_TOGGLES_COLLAPSED_STORAGE_KEY = "tuttingDisplayTogglesCollapsed";
+
+function setDisplayTogglesCollapsed(collapsed){
+  const panel = document.getElementById("displayTogglesPanel");
+  if (panel) panel.classList.toggle("collapsed", collapsed);
+  try { localStorage.setItem(DISPLAY_TOGGLES_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0"); } catch (e) {}
+}
+
+function initDisplayTogglesPanel(){
+  const showBodyJointsChk = document.getElementById("showBodyJointsChk");
+  if (showBodyJointsChk){
+    showBodyJointsChk.checked = showBodyJoints;
+    showBodyJointsChk.onchange = (e) => setJointCategoryVisible("body", e.target.checked);
+  }
+  const showHandJointsChk = document.getElementById("showHandJointsChk");
+  if (showHandJointsChk){
+    showHandJointsChk.checked = showHandJoints;
+    showHandJointsChk.onchange = (e) => setJointCategoryVisible("hand", e.target.checked);
+  }
+  const showSkeletonChk = document.getElementById("showSkeletonChk");
+  if (showSkeletonChk){
+    showSkeletonChk.checked = showSkeleton;
+    showSkeletonChk.onchange = (e) => { showSkeleton = e.target.checked; };
+  }
+  const handCollisionVizCb = document.getElementById("handCollisionVizCb");
+  if (handCollisionVizCb){
+    handCollisionVizCb.checked = handCollisionVizEnabled;
+    handCollisionVizCb.onchange = (e) => { handCollisionVizEnabled = e.target.checked; };
+  }
+
+  const collapseBtn = document.getElementById("displayTogglesCollapseBtn");
+  if (collapseBtn){
+    let collapsed = false;
+    try { collapsed = localStorage.getItem(DISPLAY_TOGGLES_COLLAPSED_STORAGE_KEY) === "1"; } catch (e) {}
+    setDisplayTogglesCollapsed(collapsed);
+    collapseBtn.onclick = () => {
+      const panel = document.getElementById("displayTogglesPanel");
+      setDisplayTogglesCollapsed(!panel.classList.contains("collapsed"));
+    };
+  }
 }
 
 // ---- 面板高度：拖曳把手手動調整 ----
@@ -6483,6 +7499,202 @@ function initUIFloat(){
   setFloating(floating, false);
 }
 
+// ======================================================================
+// 通用「可浮動＋可調整大小」小面板：把某個分頁裡的內容彈出成獨立浮動視窗，
+// 跟主面板（#ui）分開拖曳/縮放，收合時精準插回原本在 DOM 裡的位置。
+// 沿用跟 initUIFloat() 一樣的拖曳/縮放手感，抽成參數化的通用版本方便重複使用。
+// ======================================================================
+function makeFloatablePanel(opts){
+  const { contentEl, storageKey, title, defaultRect, minWidth = 240, minHeight = 160, onChange } = opts;
+  const homeParent = contentEl.parentNode;
+  const homeNextSibling = contentEl.nextSibling; // 記住原本插入點，收合時要精準插回原位，不能只 append 到最後
+
+  const panel = document.createElement("div");
+  panel.className = "floatablePanel";
+  panel.style.display = "none";
+
+  const header = document.createElement("div");
+  header.className = "floatablePanelHeader";
+  const grip = document.createElement("span");
+  grip.className = "grip";
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "floatablePanelTitle";
+  titleSpan.textContent = title;
+  const dockBtn = document.createElement("button");
+  dockBtn.type = "button";
+  dockBtn.className = "floatablePanelDockBtn";
+  dockBtn.textContent = "📌 收合回面板";
+  dockBtn.setAttribute("data-tooltip", "收合回原本的分頁");
+  header.appendChild(grip);
+  header.appendChild(titleSpan);
+  header.appendChild(dockBtn);
+
+  const body = document.createElement("div");
+  body.className = "floatablePanelBody";
+
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "floatablePanelResizeHandle";
+  resizeHandle.setAttribute("data-tooltip", "拖曳調整大小");
+
+  panel.appendChild(header);
+  panel.appendChild(body);
+  panel.appendChild(resizeHandle);
+  document.body.appendChild(panel);
+
+  function clampRect(left, top, width, height){
+    const maxW = window.innerWidth - 8;
+    const maxH = window.innerHeight - 8;
+    width = Math.min(Math.max(width, minWidth), maxW);
+    height = Math.min(Math.max(height, minHeight), maxH);
+    left = Math.min(Math.max(left, 4), window.innerWidth - width - 4);
+    top = Math.min(Math.max(top, 4), window.innerHeight - height - 4);
+    return { left, top, width, height };
+  }
+  function applyRect(rect, save){
+    panel.style.left = rect.left + "px";
+    panel.style.top = rect.top + "px";
+    panel.style.width = rect.width + "px";
+    panel.style.height = rect.height + "px";
+    if (save){
+      try { localStorage.setItem(storageKey, JSON.stringify(rect)); } catch (e) {}
+    }
+  }
+  function getDefaultRect(){
+    return clampRect(defaultRect.left, defaultRect.top, defaultRect.width, defaultRect.height);
+  }
+  function getSavedRect(){
+    let rect = null;
+    try { rect = JSON.parse(localStorage.getItem(storageKey)); } catch (e) {}
+    if (!rect || typeof rect.left !== "number") return getDefaultRect();
+    return clampRect(rect.left, rect.top, rect.width, rect.height);
+  }
+
+  let floating = false;
+  function setFloating(on){
+    floating = on;
+    if (on){
+      body.appendChild(contentEl); // contentEl 直接搬過來，事件監聽器/選取狀態都不受影響
+      panel.style.display = "flex";
+      applyRect(getSavedRect(), false);
+    } else {
+      panel.style.display = "none";
+      if (homeNextSibling && homeNextSibling.parentNode === homeParent){
+        homeParent.insertBefore(contentEl, homeNextSibling);
+      } else {
+        homeParent.appendChild(contentEl);
+      }
+    }
+    try { localStorage.setItem(storageKey + "_on", on ? "1" : "0"); } catch (e) {}
+    if (typeof onChange === "function") onChange(on); // 不論從外部按鈕還是面板內的收合鈕觸發，都要同步通知外部狀態已改變
+  }
+  dockBtn.onclick = () => setFloating(false);
+
+  // ---- 拖曳移動 ----
+  let dragging = false, dsx = 0, dsy = 0, dsl = 0, dst = 0, dsw = 0, dsh = 0;
+  function onDragMove(e){
+    if (!dragging) return;
+    // 寬高沿用拖曳開始那一刻量到的值，不要在每個 mousemove 都重新用 getBoundingClientRect() 量測——
+    // 那樣量到的是含 border 的算後尺寸，若元素不是 border-box，每次搬過去當作新的 style.width/height
+    // 會把 border 疊加進內容寬度，越拖越大；固定住寬高只改位置才是正確的拖曳行為。
+    applyRect(clampRect(dsl + (e.clientX - dsx), dst + (e.clientY - dsy), dsw, dsh), false);
+  }
+  function onDragUp(){
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("uiFloatDragging");
+    const r = panel.getBoundingClientRect();
+    applyRect(clampRect(r.left, r.top, dsw, dsh), true);
+    window.removeEventListener("pointermove", onDragMove);
+    window.removeEventListener("pointerup", onDragUp);
+  }
+  header.addEventListener("pointerdown", (e) => {
+    if (e.target === dockBtn) return;
+    dragging = true;
+    dsx = e.clientX; dsy = e.clientY;
+    const r = panel.getBoundingClientRect();
+    dsl = r.left; dst = r.top; dsw = r.width; dsh = r.height;
+    document.body.classList.add("uiFloatDragging");
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", onDragUp);
+    e.preventDefault();
+  });
+  header.addEventListener("dblclick", (e) => {
+    if (e.target === dockBtn) return;
+    applyRect(getDefaultRect(), true);
+  });
+
+  // ---- 拖曳右下角縮放 ----
+  let resizing = false, rsx = 0, rsy = 0, rsw = 0, rsh = 0, rl = 0, rt = 0;
+  function onResizeMove(e){
+    if (!resizing) return;
+    applyRect(clampRect(rl, rt, rsw + (e.clientX - rsx), rsh + (e.clientY - rsy)), false);
+  }
+  function onResizeUp(){
+    if (!resizing) return;
+    resizing = false;
+    document.body.classList.remove("uiFloatResizing");
+    const r = panel.getBoundingClientRect();
+    applyRect(clampRect(r.left, r.top, r.width, r.height), true);
+    window.removeEventListener("pointermove", onResizeMove);
+    window.removeEventListener("pointerup", onResizeUp);
+  }
+  resizeHandle.addEventListener("pointerdown", (e) => {
+    resizing = true;
+    rsx = e.clientX; rsy = e.clientY;
+    const r = panel.getBoundingClientRect();
+    rsw = r.width; rsh = r.height; rl = r.left; rt = r.top;
+    document.body.classList.add("uiFloatResizing");
+    window.addEventListener("pointermove", onResizeMove);
+    window.addEventListener("pointerup", onResizeUp);
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  // 視窗尺寸改變時重新 clamp，避免浮動視窗被卡在畫面外
+  window.addEventListener("resize", () => {
+    if (!floating) return;
+    const r = panel.getBoundingClientRect();
+    applyRect(clampRect(r.left, r.top, r.width, r.height), true);
+  });
+
+  return {
+    toggle(on){ setFloating(on === undefined ? !floating : on); },
+    isFloating(){ return floating; }
+  };
+}
+
+// ---- 手指面板：套用上面的通用浮動視窗，方便一邊看 3D 一邊微調手指、不被主面板佔用的畫面空間卡住 ----
+function initFingerFloatPanel(){
+  const grid = document.querySelector("#tabFingers .fingerHandGrid");
+  const btn = document.getElementById("fingerFloatBtn");
+  if (!grid || !btn) return;
+
+  const floatable = makeFloatablePanel({
+    contentEl: grid,
+    storageKey: "tuttingFingerFloatRect",
+    title: "✋ 手指 FK／IK",
+    defaultRect: { left: Math.max(4, window.innerWidth - 400), top: 90, width: 360, height: 440 },
+    minWidth: 260,
+    minHeight: 220,
+    onChange: () => syncLabel(), // 不管是點頁籤上的按鈕還是浮動視窗內的「收合回面板」，都要同步更新頁籤按鈕文字
+  });
+
+  function syncLabel(){
+    const on = floatable.isFloating();
+    btn.textContent = on ? "📌 收合回面板" : "🗗 浮動視窗";
+    btn.setAttribute("data-tooltip", on
+      ? "收合回「手指」分頁裡"
+      : "彈出成獨立的浮動視窗，可拖曳移動、拖右下角調整大小，編輯手指時不用被主面板卡住");
+  }
+  btn.onclick = () => { floatable.toggle(); };
+
+  let restoreFloating = false;
+  try { restoreFloating = localStorage.getItem("tuttingFingerFloatRect_on") === "1"; } catch (e) {}
+  if (restoreFloating) floatable.toggle(true);
+  syncLabel();
+}
+
+
 // ---- 面板分頁（動作姿勢庫／JSON／時間軸） ----
 function initUITabs(){
   const tabBtns = document.querySelectorAll(".tabBtn");
@@ -6542,6 +7754,7 @@ function updateBpm(){
   bpm = parseInt(document.getElementById("bpmSlider").value, 10);
   document.getElementById("bpmVal").textContent = bpm;
   updateBeatMsHint();
+  updateKfTotalDurationLabel(); // BPM改變總時長跟著變，這裡順便重算清單標題旁的顯示
   scheduleAutoSave();
   drawKfWaveform(); // BPM改變會連動每個拍點在音樂上的估計時間點，橘色參考線要跟著重算
 }
@@ -6756,6 +7969,309 @@ function solveIKAll(){
     any = true;
   }
   if (any) updateIKPoleLines();
+}
+
+// ==== 手部-軀幹碰撞回彈（防穿模）====
+// 目的：手部姿勢（不管是滑桿手動調、律動、關鍵影格播放）不小心讓手插進軀幹時，
+// 每幀自動用一次輕量 CCD 把手往外推開，而不是放任穿模。
+//
+// 做法：把軀幹（Hips→Spine→Spine1→Spine2→Neck）近似成幾段「膠囊體」（兩根骨骼世界座標
+// 連成的線段＋半徑），手掌視為一個球（球心＝手掌骨世界座標＋半徑）。每幀量測手掌球心到
+// 各段膠囊「線段最近點」的距離，若距離小於（膠囊半徑＋手球半徑）就代表穿模，取穿模最深的
+// 那一段，算出「把手推到膠囊表面剛好外側」的修正目標點，再重用既有的 solveCCDChain()
+// （原本給脊椎/手指 IK 用的同一支通用 CCD 求解器）對「上臂→前臂」這條鏈跑幾輪，
+// 溫和地把手肘彎一點讓手掌移出去，不是瞬間硬拉過去（damping 刻意調低，效果更像「頂住」
+// 而不是「彈飛」）。
+//
+// 範圍限制（刻意的取捨，避免跟其他系統打架）：
+// 1) 只作用在 rArm/lArm 這兩隻手臂的 root/mid（上臂/前臂），不動肩膀，這樣手肘自然彎開，
+//    不會連帶整個肩膀跟著轉。
+// 2) 該手臂若已開啟「手臂 IK」，代表使用者已經用目標球明確指定手要放在哪，這裡直接跳過、
+//    不跟 IK 目標搶——如果手仍然穿模，代表目標球本身就放在身體裡，請使用者自行調整目標球位置。
+// 3) 使用者正在用滑鼠拖曳這條手臂鏈上的任何一顆關節球時（draggingKey）也跳過，
+//    避免拖曳過程中手感覺被「搶走」。
+//
+// 膠囊半徑／手球半徑都是概估值（單位：公尺，跟模型本身比例一致），現在可以直接在
+// 「進階／阻尼設定」面板用滑桿即時調整（見 bindTopUI 內的 hcRadiusSlider_* 綁定），
+// 不用再改程式碼；使用者上次調過的值會存 localStorage，開頁自動還原。
+let handCollisionEnabled = false;
+let HAND_COLLISION_RADIUS = 0.055; // 手掌球半徑
+const HAND_COLLISION_RADIUS_DEFAULT = 0.055;
+const TORSO_CAPSULES = [
+  // { boneA, boneB, radius }：軀幹每一段的膠囊定義，由下往上；radius 是可變的（滑桿即時寫入這裡）
+  { boneA:"hips",   boneB:"spine",  radius:0.15 },
+  { boneA:"spine",  boneB:"spine1", radius:0.14 },
+  { boneA:"spine1", boneB:"spine2", radius:0.16 }, // 胸口一帶通常最寬
+  { boneA:"spine2", boneB:"neck",   radius:0.12 },
+];
+// ---- 腿部膠囊（大腿/小腿各一段，左右各一）：跟 TORSO_CAPSULES 同一套資料格式，
+// 讓「手插進大腿/小腿」也能被同一套膠囊碰撞邏輯偵測到，不用另外寫一套演算法。
+const LEG_CAPSULES = [
+  { boneA:"rUpLeg", boneB:"rLeg",  radius:0.10 }, // 右大腿
+  { boneA:"rLeg",   boneB:"rFoot", radius:0.07 }, // 右小腿
+  { boneA:"lUpLeg", boneB:"lLeg",  radius:0.10 }, // 左大腿
+  { boneA:"lLeg",   boneB:"lFoot", radius:0.07 }, // 左小腿
+];
+// ---- 頭部障礙物：刻意寫成「boneA===boneB」的退化膠囊（線段長度＝0），
+// closestPointOnSegment() 對長度趨近0的線段本來就會直接回傳該點，等同於「點到球心距離」的球體碰撞，
+// 完全不用另外寫一套「點 vs 球」的偵測程式碼，跟膠囊共用同一套 solveHandBodyCollision() 邏輯。
+const HEAD_CAPSULES = [
+  { boneA:"head", boneB:"head", radius:0.12 },
+];
+// 手部-身體（軀幹+腿+頭）碰撞共用的完整障礙物清單；三個陣列的物件是同一份參照，
+// 滑桿改 TORSO_CAPSULES[i].radius 或 LEG_CAPSULES[i].radius 時，這裡看到的也會同步更新，不用重建陣列。
+const ALL_BODY_CAPSULES = TORSO_CAPSULES.concat(LEG_CAPSULES, HEAD_CAPSULES);
+const ALL_BODY_CAPSULE_RADIUS_DEFAULTS = ALL_BODY_CAPSULES.map(c => c.radius); // 存一份預設值供「恢復預設值」按鈕使用
+const HAND_COLLISION_LIMBS = ["rArm", "lArm"]; // 只做手臂，沿用 IK_CHAINS 的 shoulder/root/mid/end 定義
+
+// ---- 雙手互碰（左右手掌互相推開）----
+// 跟「手-身體」是獨立開關：身體（軀幹/腿/頭）視為固定障礙物、只推手；
+// 雙手互碰則兩隻手都可能移動，視雙方目前是否被IK/拖曳鎖定，決定「兩手各退一半」還是「只推可動的那隻」。
+let handHandCollisionEnabled = false;
+
+// ---- 半徑設定的 localStorage 讀寫（跟 JOINT_LIMITS 同一套模式）----
+const HAND_COLLISION_RADII_STORAGE_KEY = "tuttingHandCollisionRadii";
+function saveHandCollisionRadii(){
+  try {
+    const data = {
+      hand: HAND_COLLISION_RADIUS,
+      capsules: TORSO_CAPSULES.map(c => c.radius),
+      legCapsules: LEG_CAPSULES.map(c => c.radius),
+      headRadius: HEAD_CAPSULES[0].radius
+    };
+    localStorage.setItem(HAND_COLLISION_RADII_STORAGE_KEY, JSON.stringify(data));
+  } catch (e){ console.warn("手部碰撞半徑儲存失敗:", e); }
+}
+function loadHandCollisionRadii(){
+  try {
+    const raw = localStorage.getItem(HAND_COLLISION_RADII_STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.hand === "number") HAND_COLLISION_RADIUS = data.hand;
+    if (Array.isArray(data.capsules)){
+      data.capsules.forEach((r, i) => { if (typeof r === "number" && TORSO_CAPSULES[i]) TORSO_CAPSULES[i].radius = r; });
+    }
+    if (Array.isArray(data.legCapsules)){
+      data.legCapsules.forEach((r, i) => { if (typeof r === "number" && LEG_CAPSULES[i]) LEG_CAPSULES[i].radius = r; });
+    }
+    if (typeof data.headRadius === "number") HEAD_CAPSULES[0].radius = data.headRadius;
+  } catch (e){ console.warn("手部碰撞半徑讀取失敗:", e); }
+}
+loadHandCollisionRadii(); // 開頁就還原使用者上次調過的半徑（若有）
+
+// ---- 共用暫存物件 ----
+const _hcHandPos = new THREE.Vector3();
+const _hcA = new THREE.Vector3();
+const _hcB = new THREE.Vector3();
+const _hcAB = new THREE.Vector3();
+const _hcAP = new THREE.Vector3();
+const _hcClosest = new THREE.Vector3();
+const _hcPushDir = new THREE.Vector3();
+const _hcTargetPos = new THREE.Vector3();
+
+// 點 p 到線段 (a,b) 的最近點，寫進 outPoint，回傳 outPoint 方便串接使用
+function closestPointOnSegment(p, a, b, outPoint){
+  _hcAB.copy(b).sub(a);
+  const lenSq = _hcAB.lengthSq();
+  if (lenSq < 1e-10) return outPoint.copy(a); // a、b幾乎重合，線段退化成一點
+  _hcAP.copy(p).sub(a);
+  const t = clampNum(_hcAP.dot(_hcAB) / lenSq, 0, 1);
+  return outPoint.copy(a).addScaledVector(_hcAB, t);
+}
+
+// 每幀呼叫：對每隻「沒開IK、沒被拖曳」的手臂做一次身體（軀幹+腿+頭）碰撞檢查＋回彈。
+// 軀幹/腿/頭在這裡一律視為「固定障礙物」——只有手會被推開，不會反過來影響腿/頭的姿勢，
+// 這樣才不會跟腿部IK/蹲彈律動/脊椎IK等其他系統互相打架。
+function solveHandBodyCollision(){
+  if (!handCollisionEnabled) return;
+  for (const limb of HAND_COLLISION_LIMBS){
+    if (ikEnabled[limb]) continue; // 該手已由IK目標球明確指定位置，不跟它搶
+    const chain = IK_CHAINS[limb];
+    const rootBone = bones[chain.root], midBone = bones[chain.mid], handBone = bones[chain.end];
+    if (!rootBone || !midBone || !handBone) continue;
+    if (draggingKey === chain.root || draggingKey === chain.mid || draggingKey === chain.end || draggingKey === chain.shoulder) continue;
+
+    handBone.getWorldPosition(_hcHandPos);
+
+    // 找出穿模最深的那一段障礙物（軀幹膠囊／腿部膠囊／頭部退化膠囊，同一套清單一起比較）
+    let deepestPenetration = 0;
+    let found = false;
+    for (const cap of ALL_BODY_CAPSULES){
+      const boneA = bones[cap.boneA], boneB = bones[cap.boneB];
+      if (!boneA || !boneB) continue;
+      boneA.getWorldPosition(_hcA);
+      boneB.getWorldPosition(_hcB);
+      closestPointOnSegment(_hcHandPos, _hcA, _hcB, _hcClosest);
+      const dist = _hcHandPos.distanceTo(_hcClosest);
+      const penetration = (cap.radius + HAND_COLLISION_RADIUS) - dist;
+      if (penetration > deepestPenetration){
+        deepestPenetration = penetration;
+        found = true;
+        _hcPushDir.copy(_hcHandPos).sub(_hcClosest);
+        if (_hcPushDir.lengthSq() < 1e-8) _hcPushDir.set(1, 0, 0); // 剛好在中心線上，隨便挑個方向避免除零
+        _hcPushDir.normalize();
+        _hcTargetPos.copy(_hcClosest).addScaledVector(_hcPushDir, cap.radius + HAND_COLLISION_RADIUS);
+      }
+    }
+    if (!found) continue;
+
+    // 輕量 CCD：只帶上臂＋前臂兩節，damping調低讓效果像「頂住」而不是「瞬間彈開」
+    solveCCDChain([rootBone, midBone], handBone, _hcTargetPos, 3, 0.35);
+    syncTargetFromBone(chain.root);
+    syncTargetFromBone(chain.mid);
+  }
+}
+
+// ==== 雙手互碰（防穿模）====
+// 跟上面「手-身體」不同：兩隻手都可能是「可動」的一方，不能直接套用同一套「障礙物固定、只推一邊」邏輯。
+// 規則：
+//   1) 若某隻手已開IK或正被拖曳，視為使用者明確鎖定，這隻手在這裡不會被移動（跟手-身體碰撞同一個原則）。
+//   2) 兩隻手都可動時，穿模量各退一半，感覺像兩顆球互相推擠；
+//      只有一隻可動時，把可動的那隻整個推到「剛好貼齊另一隻手表面」的位置。
+//   3) 兩隻手都被鎖定時完全不處理——代表使用者自己刻意把兩隻手疊在一起，尊重使用者的選擇。
+const _hhPosR = new THREE.Vector3();
+const _hhPosL = new THREE.Vector3();
+const _hhPushDir = new THREE.Vector3();
+const _hhTargetR = new THREE.Vector3();
+const _hhTargetL = new THREE.Vector3();
+
+function isLimbHandMovable(limb){
+  if (ikEnabled[limb]) return false;
+  const chain = IK_CHAINS[limb];
+  return draggingKey !== chain.root && draggingKey !== chain.mid && draggingKey !== chain.end && draggingKey !== chain.shoulder;
+}
+
+// 每幀呼叫：偵測右手掌球與左手掌球是否互相穿模，穿模時各自（或單邊）用輕量CCD推開。
+function solveHandHandCollision(){
+  if (!handHandCollisionEnabled) return;
+  const rChain = IK_CHAINS.rArm, lChain = IK_CHAINS.lArm;
+  const rHandBone = bones[rChain.end], lHandBone = bones[lChain.end];
+  const rRoot = bones[rChain.root], rMid = bones[rChain.mid];
+  const lRoot = bones[lChain.root], lMid = bones[lChain.mid];
+  if (!rHandBone || !lHandBone || !rRoot || !rMid || !lRoot || !lMid) return;
+
+  const rMovable = isLimbHandMovable("rArm");
+  const lMovable = isLimbHandMovable("lArm");
+  if (!rMovable && !lMovable) return; // 兩手都鎖定，不介入
+
+  rHandBone.getWorldPosition(_hhPosR);
+  lHandBone.getWorldPosition(_hhPosL);
+  const minDist = HAND_COLLISION_RADIUS * 2;
+  const dist = _hhPosR.distanceTo(_hhPosL);
+  if (dist >= minDist) return; // 沒有穿模
+
+  _hhPushDir.copy(_hhPosR).sub(_hhPosL);
+  if (_hhPushDir.lengthSq() < 1e-8) _hhPushDir.set(1, 0, 0); // 兩手剛好重合，隨便挑個方向避免除零
+  _hhPushDir.normalize();
+  const penetration = minDist - dist;
+
+  if (rMovable && lMovable){
+    // 兩手都可動：各退穿模量的一半，像兩顆球互相推開
+    _hhTargetR.copy(_hhPosR).addScaledVector(_hhPushDir, penetration * 0.5);
+    _hhTargetL.copy(_hhPosL).addScaledVector(_hhPushDir, -penetration * 0.5);
+  } else if (rMovable){
+    // 只有右手可動：把右手整個推到「貼齊左手（固定）表面」的位置
+    _hhTargetR.copy(_hhPosL).addScaledVector(_hhPushDir, minDist);
+  } else {
+    // 只有左手可動
+    _hhTargetL.copy(_hhPosR).addScaledVector(_hhPushDir, -minDist);
+  }
+
+  if (rMovable){
+    solveCCDChain([rRoot, rMid], rHandBone, _hhTargetR, 3, 0.35);
+    syncTargetFromBone(rChain.root);
+    syncTargetFromBone(rChain.mid);
+  }
+  if (lMovable){
+    solveCCDChain([lRoot, lMid], lHandBone, _hhTargetL, 3, 0.35);
+    syncTargetFromBone(lChain.root);
+    syncTargetFromBone(lChain.mid);
+  }
+}
+
+// ==== 手部-軀幹碰撞：膠囊體／手掌球 可視化（除錯用）====
+// 純視覺輔助，跟碰撞是否真的生效（handCollisionEnabled）無關——即使沒開碰撞回彈，
+// 也可以單獨打開這個可視化，一邊拖滑桿一邊看膠囊體大小/位置對不對，調完再去開回彈。
+let handCollisionVizEnabled = false;
+let handCollisionVizGroup = null; // 一個 Group，裝所有可視化 mesh，方便整組顯示/隱藏
+const handCollisionVizCapsuleMeshes = []; // 跟 ALL_BODY_CAPSULES（軀幹+腿+頭）一一對應
+const handCollisionVizHandMeshes = {}; // { rArm: mesh, lArm: mesh }
+const HAND_COLLISION_VIZ_EPS = 0.001; // 半徑/長度變化小於這個值就不重建geometry，省掉沒必要的重新配置
+
+function buildHandCollisionVizMeshes(){
+  handCollisionVizGroup = new THREE.Group();
+  handCollisionVizGroup.visible = false;
+  handCollisionVizGroup.renderOrder = 997;
+
+  const capsuleMat = new THREE.MeshBasicMaterial({
+    color: 0x00e5ff, transparent: true, opacity: 0.28,
+    depthWrite: false, side: THREE.DoubleSide, wireframe: false
+  });
+  ALL_BODY_CAPSULES.forEach((cap) => {
+    // 先給一個佔位geometry（真正尺寸在 updateHandCollisionVizMeshes() 第一次呼叫時就會依實際骨骼距離重建）
+    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.01, 0.01, 4, 8), capsuleMat);
+    mesh.userData.builtRadius = 0.01;
+    mesh.userData.builtLength = 0.01;
+    handCollisionVizCapsuleMeshes.push(mesh);
+    handCollisionVizGroup.add(mesh);
+  });
+
+  const handMat = new THREE.MeshBasicMaterial({
+    color: 0xff9500, transparent: true, opacity: 0.35,
+    depthWrite: false, side: THREE.DoubleSide
+  });
+  for (const limb of HAND_COLLISION_LIMBS){
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), handMat); // 半徑1的單位球，靠 scale 表示實際半徑（球體均勻縮放不會變形，不用重建geometry）
+    handCollisionVizHandMeshes[limb] = mesh;
+    handCollisionVizGroup.add(mesh);
+  }
+
+  scene.add(handCollisionVizGroup);
+}
+
+// 每幀呼叫：只在 handCollisionVizEnabled 開啟時才更新位置/朝向/尺寸，關閉時直接跳過省效能。
+function updateHandCollisionVizMeshes(){
+  if (!handCollisionVizGroup) return;
+  handCollisionVizGroup.visible = handCollisionVizEnabled;
+  if (!handCollisionVizEnabled) return;
+
+  ALL_BODY_CAPSULES.forEach((cap, i) => {
+    const mesh = handCollisionVizCapsuleMeshes[i];
+    const boneA = bones[cap.boneA], boneB = bones[cap.boneB];
+    if (!boneA || !boneB){ mesh.visible = false; return; }
+    mesh.visible = true;
+    boneA.getWorldPosition(_hcA);
+    boneB.getWorldPosition(_hcB);
+    const length = _hcA.distanceTo(_hcB);
+
+    // 半徑或長度變化夠大才重建geometry（CapsuleGeometry沒辦法像球體一樣單純靠scale表示半徑變化，
+    // 非等向縮放會把兩端的半球型端蓋拉成橢圓，形狀會跑掉，所以改成必要時才重新配置頂點）
+    if (Math.abs(mesh.userData.builtRadius - cap.radius) > HAND_COLLISION_VIZ_EPS ||
+        Math.abs(mesh.userData.builtLength - length) > HAND_COLLISION_VIZ_EPS){
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.CapsuleGeometry(cap.radius, Math.max(length, 0.001), 4, 8);
+      mesh.userData.builtRadius = cap.radius;
+      mesh.userData.builtLength = length;
+    }
+
+    // CapsuleGeometry預設沿本地Y軸、置中在原點，這裡把它擺到 A、B 中點，並把Y軸轉向 A→B 方向
+    mesh.position.copy(_hcA).add(_hcB).multiplyScalar(0.5);
+    _hcPushDir.copy(_hcB).sub(_hcA).normalize(); // 借用既有的暫存向量，跟碰撞計算不會同時用到
+    if (_hcPushDir.lengthSq() > 1e-8){
+      mesh.quaternion.setFromUnitVectors(_stRefY, _hcPushDir);
+    }
+  });
+
+  for (const limb of HAND_COLLISION_LIMBS){
+    const mesh = handCollisionVizHandMeshes[limb];
+    const chain = IK_CHAINS[limb];
+    const handBone = bones[chain.end];
+    if (!handBone){ mesh.visible = false; continue; }
+    mesh.visible = true;
+    handBone.getWorldPosition(_hcHandPos);
+    mesh.position.copy(_hcHandPos);
+    mesh.scale.setScalar(HAND_COLLISION_RADIUS); // 單位球均勻縮放＝半徑，形狀不會失真
+  }
 }
 
 // ---- 脊椎多節 CCD IK（方向A：頭主動搆/對準目標，身體固定）----
@@ -7047,43 +8563,79 @@ function solveDualHandAnchor(){
   model.updateWorldMatrix(true, true);
 }
 
-// 判斷某個關節 key 目前是否被「開啟中的 IK」接管（root/mid 骨骼），是的話 FK 迴圈要跳過它
-function isIKDrivenKey(key){
+// ---- 「目前被 IK 接管的關節」集合 ----
+// 這份集合就是舊版 isIKDrivenKey() 逐 key 現算的結果，改成「狀態變動時重建一次、
+// 之後每幀只做 O(1) 查詢」。
+//
+// 為什麼值得改：updateBones() 每幀要跑過 ALL_JOINT_KEYS（20 身體 + 30 指節 = 50 個），
+// 每個 key 都呼叫一次舊版函式，而舊版每次都要重掃 4 條肢體 + 4 節脊椎鏈 +
+// 2 個 look-at + 10 根手指 × 3 節（後兩者還是 Array.includes 線性搜尋）。
+// 全開時單一個 key 約 48 次比對，乘上 50 個 key 就是每幀約 2400 次比對。
+//
+// ⚠️ 正確性前提：ikEnabled / spineIKEnabled / lookAtEnabled / fingerIKEnabled
+//    這四個狀態「只能」透過對應的 setXxxEnabled() 修改（目前確實如此，每個狀態
+//    都只有一個寫入點）。若之後有人直接改這些變數而沒重建，集合就會失去同步，
+//    症狀是某些關節的 FK 該跳過卻沒跳過（IK 跟 FK 每幀互搶同一根骨骼 → 抖動）。
+//
+// 註：不要拿現成的 markerIKHidden 來替代這份集合——兩者語意不同、內容也不相等。
+//    markerIKHidden 是「關節球要不要隱藏」，不含 chain.shoulder，也完全不含 look-at
+//    的 head/spine2；這份集合是「FK 要不要跳過」，兩者都要納入，是它的嚴格超集。
+const ikDrivenKeys = new Set();
+
+// 從四個開關狀態「整份重算」（不是增量更新），所以不管呼叫順序如何都不會累積錯誤。
+// 呼叫時機：四個 setXxxEnabled() 內、賦值那一行的正下方（理由見各處註解）。
+function rebuildIKDrivenKeys(){
+  ikDrivenKeys.clear();
   for (const limb of IK_LIMB_KEYS){
     if (!ikEnabled[limb]) continue;
     const chain = IK_CHAINS[limb];
-    if (key === chain.root || key === chain.mid) return true;
-    if (chain.shoulder && key === chain.shoulder) return true;
+    ikDrivenKeys.add(chain.root);
+    ikDrivenKeys.add(chain.mid);
+    if (chain.shoulder) ikDrivenKeys.add(chain.shoulder); // 僅手臂有鎖骨輔助
   }
-  if (spineIKEnabled && SPINE_IK_CHAIN.bones.includes(key)) return true;
-  if (lookAtEnabled.head && key === LOOKAT_CONFIG.head.key) return true;
-  if (lookAtEnabled.chest && key === LOOKAT_CONFIG.chest.key) return true;
+  if (spineIKEnabled) for (const k of SPINE_IK_CHAIN.bones) ikDrivenKeys.add(k);
+  if (lookAtEnabled.head)  ikDrivenKeys.add(LOOKAT_CONFIG.head.key);
+  if (lookAtEnabled.chest) ikDrivenKeys.add(LOOKAT_CONFIG.chest.key);
   for (const fingerId of FINGER_IDS){
-    if (fingerIKEnabled[fingerId] && FINGER_IK_CHAINS[fingerId].bones.includes(key)) return true;
+    if (!fingerIKEnabled[fingerId]) continue;
+    for (const k of FINGER_IK_CHAINS[fingerId].bones) ikDrivenKeys.add(k);
   }
-  return false;
 }
+
+// 判斷某個關節 key 目前是否被「開啟中的 IK」接管（root/mid 骨骼），是的話 FK 迴圈要跳過它。
+// 保留這個函式名當薄包裝，之後若有其他呼叫端不必跟著改寫。
+function isIKDrivenKey(key){ return ikDrivenKeys.has(key); }
 
 // 一般狀態下（未播放拍點）：非拖曳中、且未被 IK 接管的關節用彈簧式 lerp 平滑趨近目標角度
 // 非播放狀態下每幀都會對全部（非IK接管的）關節跑一次，是最頻繁的路徑之一，
 // 改用共用暫存 Quaternion（eulerToQuat 的 outQuat 參數）+ 原地更新 current[] 陣列的三個數字，
 // 不再逐 key 配置新的 Euler/Quaternion/陣列。
 const _ubQuat = new THREE.Quaternion();
+// 收斂閾值（單位：度）：current 用指數衰減逼近 target，數學上永遠不會「精確等於」，
+// 只會差距越來越小，所以閒置偵測（見 animate() 附近的 isSceneActive()）不能判斷「是否相等」，
+// 只能判斷「差距是否已經小到可以視為靜止」。
+const UPDATE_BONES_CONVERGE_EPS_DEG = 0.01;
 function updateBones(){
-  if (!model) return;
+  if (!model) return false;
   const t = 0.28;
+  let stillMoving = false;
   for (const key of ALL_JOINT_KEYS){
     if (key === draggingKey) continue;
-    if (isIKDrivenKey(key)) continue;
+    if (ikDrivenKeys.has(key)) continue; // O(1)：集合在 IK 開關變動時重建，見 rebuildIKDrivenKeys()
     const bone = bones[key];
     const tg = target[key];
     if (!bone || !tg) continue;
     const c = current[key];
-    c[0] += (tg[0]-c[0])*t;
-    c[1] += (tg[1]-c[1])*t;
-    c[2] += (tg[2]-c[2])*t;
+    const dx = tg[0]-c[0], dy = tg[1]-c[1], dz = tg[2]-c[2];
+    if (Math.abs(dx) > UPDATE_BONES_CONVERGE_EPS_DEG ||
+        Math.abs(dy) > UPDATE_BONES_CONVERGE_EPS_DEG ||
+        Math.abs(dz) > UPDATE_BONES_CONVERGE_EPS_DEG) stillMoving = true;
+    c[0] += dx*t;
+    c[1] += dy*t;
+    c[2] += dz*t;
     bone.quaternion.copy(restQuat[key]).multiply(eulerToQuat(c, _ubQuat));
   }
+  return stillMoving;
 }
 
 // ---- 幾何鏡頭：預設視角快照 ----
@@ -7098,11 +8650,26 @@ function updateBones(){
 // 跟畫面上實際站著的角色對不上（甚至只量到一小塊），所以改成量測骨骼實際世界位置，
 // 再加一點皮膚/服裝的估計留白，準確度更高也更直覺。
 // 回傳半寬/半高/半深跟中心點，模型/骨骼還沒準備好時回傳 null
-function getModelBoundsInfo(){
+// ---- 包圍盒量測共用暫存 ----
+// 這兩支量測函式（全身/單手）在分割視窗開啟時是每隔一小段時間就要跑的路徑，
+// 原本每次呼叫都會 new 出 Vector3×2 + Box3，改成模組層級共用物件重複寫入。
+// ⚠️ 回傳的 result 物件是「共用的」：呼叫端必須立刻把數值讀走／用掉，
+//    不可以存起來跨呼叫使用，否則下一次量測就會把它覆寫掉。
+//    （全身與單手各有一份獨立的 result，兩者不會互相污染。）
+const _boundsVec = new THREE.Vector3();
+const _boundsBox = new THREE.Box3();
+const _boundsSize = new THREE.Vector3();
+const _bodyBoundsResult = { halfX:0, halfY:0, halfZ:0, center: new THREE.Vector3() };
+const _handBoundsResult = { halfX:0, halfY:0, halfZ:0, center: new THREE.Vector3() };
+
+// skipMatrixUpdate=true：呼叫端保證世界矩陣已是最新（例如剛跑完 renderer.render()，
+// 或同一批流程開頭已經自己更新過一次），可省掉重複的 model.updateWorldMatrix()。
+// 一次要算好幾個視角時，這個旗標讓整批只更新一次而不是每個視角各更新一次。
+function getModelBoundsInfo(skipMatrixUpdate){
   if (!model) return null;
-  model.updateWorldMatrix(true, true);
-  const v = new THREE.Vector3();
-  const box = new THREE.Box3();
+  if (!skipMatrixUpdate) model.updateWorldMatrix(true, true);
+  const v = _boundsVec;
+  const box = _boundsBox.makeEmpty();
   let hasPoint = false;
   for (const key of ALL_JOINT_KEYS){
     const bone = bones[key];
@@ -7126,17 +8693,24 @@ function getModelBoundsInfo(){
   box.min.x -= pad;          box.max.x += pad;
   box.min.y -= pad * 0.7;    box.max.y += pad * 1.4; // 頭頂比腳底需要更多留白
   box.min.z -= pad;          box.max.z += pad;
-  const size = new THREE.Vector3(); box.getSize(size);
-  const center = new THREE.Vector3(); box.getCenter(center);
-  return { halfX: size.x/2, halfY: size.y/2, halfZ: size.z/2, center };
+  box.getSize(_boundsSize);
+  box.getCenter(_bodyBoundsResult.center);
+  _bodyBoundsResult.halfX = _boundsSize.x/2;
+  _bodyBoundsResult.halfY = _boundsSize.y/2;
+  _bodyBoundsResult.halfZ = _boundsSize.z/2;
+  return _bodyBoundsResult;
 }
 
 // 算出「要讓一個半寬 halfW、半高 halfH 的平面完整入鏡」所需的鏡頭距離，
 // 同時考慮目前畫面的寬高比（aspect 較窄的直向手機畫面，水平視角會比垂直視角更容易先裁到）。
 // marginFactor > 1 用來留一點邊界，避免角色貼著畫面邊緣。
-function computeFitDistance(halfW, halfH, marginFactor){
+// aspect 可選：不傳時沿用主鏡頭的長寬比（原本的行為）。分割視窗的小 canvas
+// 長寬比跟主畫面完全不同（例如主畫面 2.4、預覽視窗 1.6），沿用主鏡頭的值算出來的
+// 距離會太近或太遠、把角色裁掉，所以那邊改成傳入該預覽視窗自己的 aspect。
+function computeFitDistance(halfW, halfH, marginFactor, aspect){
   const vFovHalf = (camera.fov * Math.PI / 180) / 2;
-  const hFovHalf = Math.atan(Math.tan(vFovHalf) * camera.aspect);
+  const a = (typeof aspect === "number" && aspect > 0) ? aspect : camera.aspect;
+  const hFovHalf = Math.atan(Math.tan(vFovHalf) * a);
   const distV = halfH / Math.tan(vFovHalf);
   const distH = halfW / Math.tan(hFovHalf);
   return Math.max(distV, distH) * (marginFactor || 1.45);
@@ -7144,11 +8718,11 @@ function computeFitDistance(halfW, halfH, marginFactor){
 
 // 手部特寫用的包圍範圍：只抓該手掌骨本身＋該手5指指尖 effector 的目前世界座標，
 // 不像 getModelBoundsInfo() 抓全身，這樣特寫時才不會因為身體其他部位太遠而把手縮得很小。
-function getHandBoundsInfo(prefix){ // prefix："r" 或 "l"
+function getHandBoundsInfo(prefix, skipMatrixUpdate){ // prefix："r" 或 "l"
   if (!model) return null;
-  model.updateWorldMatrix(true, true);
-  const v = new THREE.Vector3();
-  const box = new THREE.Box3();
+  if (!skipMatrixUpdate) model.updateWorldMatrix(true, true);
+  const v = _boundsVec;
+  const box = _boundsBox.makeEmpty();
   let hasPoint = false;
   const handBone = bones[prefix + "Hand"];
   if (handBone){ handBone.getWorldPosition(v); box.expandByPoint(v); hasPoint = true; }
@@ -7165,9 +8739,12 @@ function getHandBoundsInfo(prefix){ // prefix："r" 或 "l"
   box.min.x -= pad; box.max.x += pad;
   box.min.y -= pad; box.max.y += pad;
   box.min.z -= pad; box.max.z += pad;
-  const size = new THREE.Vector3(); box.getSize(size);
-  const center = new THREE.Vector3(); box.getCenter(center);
-  return { halfX: size.x/2, halfY: size.y/2, halfZ: size.z/2, center };
+  box.getSize(_boundsSize);
+  box.getCenter(_handBoundsResult.center);
+  _handBoundsResult.halfX = _boundsSize.x/2;
+  _handBoundsResult.halfY = _boundsSize.y/2;
+  _handBoundsResult.halfZ = _boundsSize.z/2;
+  return _handBoundsResult;
 }
 
 // 算出「右手特寫」/「左手特寫」鏡頭預設值：以該手掌＋手指目前的世界座標為中心，
@@ -7175,9 +8752,11 @@ function getHandBoundsInfo(prefix){ // prefix："r" 或 "l"
 // 也比較不會被前臂/身體擋住。外側偏移方向用 hips 骨盆 x 座標跟手掌中心比較後自動判斷
 // （而不是直接寫死 r=偏一邊、l=偏另一邊），這樣即使角色擺出交叉手臂之類的姿勢，
 // 鏡頭仍會往手實際所在的那一側偏，不會反而拍到手背。
-function computeHandCameraPreset(prefix){
+const _handHipsVec = new THREE.Vector3();
+const _handDirVec = new THREE.Vector3();
+function computeHandCameraPreset(prefix, skipMatrixUpdate){
   const h = modelHeight;
-  const info = getHandBoundsInfo(prefix);
+  const info = getHandBoundsInfo(prefix, skipMatrixUpdate);
   if (!info){
     // 模型/骨骼尚未就緒時的退回值，理論上跟全身鏡頭一樣不會真的用到
     const midY = h * 0.55;
@@ -7188,66 +8767,106 @@ function computeHandCameraPreset(prefix){
   const hipsBone = bones.hips;
   let sideSign = prefix === "r" ? -1 : 1;
   if (hipsBone){
-    const hv = new THREE.Vector3();
+    const hv = _handHipsVec;
     hipsBone.getWorldPosition(hv);
     const diff = center.x - hv.x;
     if (Math.abs(diff) > 1e-4) sideSign = Math.sign(diff);
   }
   const sphereR = Math.max(halfX, halfY, halfZ, h * 0.06);
   const dist = computeFitDistance(sphereR, sphereR, 1.9);
-  const dir = new THREE.Vector3(sideSign * 0.45, 0.4, 1).normalize().multiplyScalar(dist);
+  const dir = _handDirVec.set(sideSign * 0.45, 0.4, 1).normalize().multiplyScalar(dist);
   return {
     pos:[center.x + dir.x, center.y + dir.y, center.z + dir.z],
     target:[center.x, center.y, center.z]
   };
 }
 
-function getCameraPresets(){
+// 全身類視角（相對於 rhand/lhand 這種手部特寫）的名稱清單
+const CAMERA_BODY_VIEW_NAMES = ["front", "back", "left", "right", "top", "iso"];
+
+// 模型/骨骼尚未就緒時的退回值（跟舊版邏輯一致，只是理論上不會真的走到這裡）
+function fallbackBodyCameraPreset(name){
   const h = modelHeight;
-  const info = getModelBoundsInfo();
-  const handPresets = { rhand: computeHandCameraPreset("r"), lhand: computeHandCameraPreset("l") };
-  // 模型尚未載入完成時的退回值（跟舊版邏輯一致，只是理論上不會真的走到這裡）
-  if (!info){
-    const midY = h * 0.55;
-    return {
-      front: { pos:[0, h*0.75, h*1.6], target:[0, midY, 0] },
-      back:  { pos:[0, h*0.75, -h*1.6], target:[0, midY, 0] },
-      left:  { pos:[-h*1.6, h*0.75, 0], target:[0, midY, 0] },
-      right: { pos:[h*1.6, h*0.75, 0], target:[0, midY, 0] },
-      top:   { pos:[0.01, h*2.3, 0.01], target:[0, midY, 0] },
-      iso:   { pos:[h*1.15, h*0.95, h*1.15], target:[0, midY, 0] },
-      ...handPresets
-    };
+  const midY = h * 0.55;
+  switch (name){
+    case "front": return { pos:[0, h*0.75, h*1.6],  target:[0, midY, 0] };
+    case "back":  return { pos:[0, h*0.75, -h*1.6], target:[0, midY, 0] };
+    case "left":  return { pos:[-h*1.6, h*0.75, 0], target:[0, midY, 0] };
+    case "right": return { pos:[h*1.6, h*0.75, 0],  target:[0, midY, 0] };
+    case "top":   return { pos:[0.01, h*2.3, 0.01], target:[0, midY, 0] };
+    case "iso":   return { pos:[h*1.15, h*0.95, h*1.15], target:[0, midY, 0] };
   }
+  return null;
+}
+
+// 依「已經量好的包圍盒 info」算出「單一個」全身視角的鏡頭參數。
+// 為什麼要拆出來只算一個：分割視窗一次要算好幾個視角，但包圍盒量測
+// （getModelBoundsInfo，會遍歷 50 根骨骼＋10 個指尖）是整批共用的成本，
+// 不該每個視角各量一次；更不該為了拿「正面」而順便把兩個手部特寫也算出來。
+// aspect 可選：分割視窗傳自己那顆小 canvas 的長寬比，取景才不會被裁到。
+const _isoDirVec = new THREE.Vector3();
+function computeBodyCameraPreset(name, info, aspect){
+  if (!info) return fallbackBodyCameraPreset(name);
   const { halfX, halfY, halfZ, center } = info;
   const cx = center.x, cy = center.y, cz = center.z;
   const margin = 1.45;
-  // 正面/背面：鏡頭沿 Z 軸看，畫面裡的「寬」對應模型 X 方向、「高」對應模型 Y 方向
-  const distFrontBack = computeFitDistance(halfX, halfY, margin);
-  // 左側/右側：鏡頭沿 X 軸看，畫面裡的「寬」對應模型 Z 方向（厚度）、「高」對應 Y 方向
-  const distSide = computeFitDistance(halfZ, halfY, margin);
-  // 俯視：由上往下看 XZ 平面，兩個方向都可能被裁到，取較大者保證整個人（含手腳張開的範圍）都入鏡
-  const topHalf = Math.max(halfX, halfZ);
-  const distTop = computeFitDistance(topHalf, topHalf, margin);
-  // 45° 斜角：用整體包圍球半徑估算，確保從任何斜角看過去都不會裁到
-  const sphereR = Math.sqrt(halfX*halfX + halfY*halfY + halfZ*halfZ);
-  const distIso = computeFitDistance(sphereR, sphereR, margin);
-  const isoDir = new THREE.Vector3(1, 0.82, 1).normalize().multiplyScalar(distIso);
-  return {
-    front: { pos:[cx, cy, cz + distFrontBack], target:[cx, cy, cz] },
-    back:  { pos:[cx, cy, cz - distFrontBack], target:[cx, cy, cz] },
-    left:  { pos:[cx - distSide, cy, cz], target:[cx, cy, cz] },
-    right: { pos:[cx + distSide, cy, cz], target:[cx, cy, cz] },
-    top:   { pos:[cx + 0.01, cy + distTop, cz + 0.01], target:[cx, cy, cz] }, // x/z 給極小偏移避免正上方 gimbal 問題
-    iso:   { pos:[cx + isoDir.x, cy + isoDir.y, cz + isoDir.z], target:[cx, cy, cz] },
-    ...handPresets
-  };
+  switch (name){
+    // 正面/背面：鏡頭沿 Z 軸看，畫面裡的「寬」對應模型 X 方向、「高」對應模型 Y 方向
+    case "front": case "back": {
+      const d = computeFitDistance(halfX, halfY, margin, aspect);
+      const sign = name === "front" ? 1 : -1;
+      return { pos:[cx, cy, cz + sign*d], target:[cx, cy, cz] };
+    }
+    // 左側/右側：鏡頭沿 X 軸看，畫面裡的「寬」對應模型 Z 方向（厚度）、「高」對應 Y 方向
+    case "left": case "right": {
+      const d = computeFitDistance(halfZ, halfY, margin, aspect);
+      const sign = name === "right" ? 1 : -1;
+      return { pos:[cx + sign*d, cy, cz], target:[cx, cy, cz] };
+    }
+    // 俯視：由上往下看 XZ 平面，兩個方向都可能被裁到，取較大者保證整個人（含手腳張開的範圍）都入鏡
+    case "top": {
+      const topHalf = Math.max(halfX, halfZ);
+      const d = computeFitDistance(topHalf, topHalf, margin, aspect);
+      // x/z 給極小偏移避免正上方 gimbal 問題
+      return { pos:[cx + 0.01, cy + d, cz + 0.01], target:[cx, cy, cz] };
+    }
+    // 45° 斜角：用整體包圍球半徑估算，確保從任何斜角看過去都不會裁到
+    case "iso": {
+      const sphereR = Math.sqrt(halfX*halfX + halfY*halfY + halfZ*halfZ);
+      const d = computeFitDistance(sphereR, sphereR, margin, aspect);
+      const dir = _isoDirVec.set(1, 0.82, 1).normalize().multiplyScalar(d);
+      return { pos:[cx + dir.x, cy + dir.y, cz + dir.z], target:[cx, cy, cz] };
+    }
+  }
+  return null;
+}
+
+// 對外單取入口：只算被要求的那一個視角。
+// 「鏡頭」下拉選單一次只切換到一個視角，過去卻要把 8 個視角（含兩次手部特寫、
+// 三次完整世界矩陣重算）全部算完再丟掉 7 個——這裡直接取需要的那個就好。
+function getCameraPreset(name, aspect, skipMatrixUpdate){
+  if (name === "rhand") return computeHandCameraPreset("r", skipMatrixUpdate);
+  if (name === "lhand") return computeHandCameraPreset("l", skipMatrixUpdate);
+  return computeBodyCameraPreset(name, getModelBoundsInfo(skipMatrixUpdate), aspect);
+}
+
+// 保留「一次取得整份」的介面給真的需要全部視角的呼叫端（目前沒有，留作相容用）。
+// 這裡自己先更新一次世界矩陣，下面各視角就全部帶 skipMatrixUpdate=true，
+// 整批只更新一次而不是每個視角各更新一次。
+function getCameraPresets(){
+  if (model) model.updateWorldMatrix(true, true);
+  const info = getModelBoundsInfo(true);
+  const out = {};
+  for (const name of CAMERA_BODY_VIEW_NAMES) out[name] = computeBodyCameraPreset(name, info);
+  out.rhand = computeHandCameraPreset("r", true);
+  out.lhand = computeHandCameraPreset("l", true);
+  return out;
 }
 
 // 平滑過渡到某個預設視角（不直接瞬間跳，體感較不突兀）；updateCameraTween() 每幀推進。
 // instant=true 時直接套用不做過渡動畫（用於初始載入模型時，避免畫面一開始還要飛一段）。
 function goToCameraPreset(name, instant){
-  const preset = getCameraPresets()[name];
+  const preset = getCameraPreset(name);
   if (!preset || !camera || !controls) return;
   const toPos = new THREE.Vector3(preset.pos[0], preset.pos[1], preset.pos[2]);
   const toTarget = new THREE.Vector3(preset.target[0], preset.target[1], preset.target[2]);
@@ -7284,7 +8903,8 @@ function bindCameraUI(){
 // ======================================================================
 // 分割視窗（唯讀多視角預覽）— 主視窗（camera/controls/raycaster/TransformControls 等）完全不動，
 // 這裡只是額外開幾個小 canvas，各自用自己的相機讀同一個 scene 渲染，跟著主視窗的姿勢即時同步，
-// 不接收滑鼠事件、不做選取/拖曳。角度直接沿用 getCameraPresets()（跟「鏡頭」按鈕同一份資料）。
+// 不接收滑鼠事件、不做選取/拖曳。角度直接沿用 computeBodyCameraPreset()（跟「鏡頭」按鈕同一份邏輯），
+// 但取景（重算包圍盒與鏡頭距離）有做節流＋阻尼跟隨，見 updateSplitViewPanes()。
 // ======================================================================
 const SPLIT_VIEW_MAX_PANES = 3;
 const SPLIT_VIEW_NAMES = ["front", "back", "left", "right", "top", "iso"];
@@ -7312,8 +8932,16 @@ function createSplitPane(name){
   paneRenderer.outputColorSpace = THREE.SRGBColorSpace;
   const paneCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 
-  splitViewPanes[name] = { root, canvas, renderer: paneRenderer, camera: paneCamera };
+  splitViewPanes[name] = {
+    root, canvas, renderer: paneRenderer, camera: paneCamera,
+    // 取景狀態：desired＝最近一次重新取景算出的目標；cur＝畫面上實際使用的值（每幀朝 desired 阻尼靠近）。
+    // framed=false 代表還沒取過景，第一次會直接瞬間套用，不做阻尼（避免鏡頭從原點飛過來）。
+    desiredPos: new THREE.Vector3(), desiredTarget: new THREE.Vector3(),
+    curPos: new THREE.Vector3(), curTarget: new THREE.Vector3(),
+    framed: false
+  };
   resizeSplitPane(name);
+  invalidateSplitViewFraming(); // 新開的視窗下一幀就先取一次景，不用等節流時間到
   updateSplitViewCheckboxDisabled();
 }
 
@@ -7338,6 +8966,8 @@ function resizeSplitPane(name){
 
 function resizeAllSplitPanes(){
   for (const name in splitViewPanes) resizeSplitPane(name);
+  // 預覽視窗的 aspect 變了，取景距離要重算，不必等節流時間到
+  invalidateSplitViewFraming();
 }
 
 // 已開到上限時，把還沒勾選的其他 checkbox 先 disable 掉，避免使用者以為勾了卻沒反應。
@@ -7387,18 +9017,63 @@ function initSplitView(){
   loadSplitViewState();
 }
 
-// animate() 每幀在主畫面渲染完之後呼叫：場景的 matrixWorld 這一幀已經算好，
-// 這裡只需要幫每個開啟中的預覽視窗換一顆相機的角度，直接照現成的 getCameraPresets() 再 render 一次。
-function updateSplitViewPanes(){
+// ---- 預覽視窗的取景（重新算鏡頭距離）節流 ----
+// 過去這裡每一幀都呼叫 getCameraPresets()，而那支函式會連鎖觸發：
+//   getModelBoundsInfo()（updateWorldMatrix + 50 根骨骼 + 10 個指尖 getWorldPosition）
+//   + computeHandCameraPreset("r")／("l")（各自「又」updateWorldMatrix 一次）
+// 等於每幀 3 次完整世界矩陣重算、約 70 次 getWorldPosition、十幾個新物件配置，
+// 最後卻只用得到其中最多 3 個視角，而且 rhand/lhand 這兩個手部特寫在分割視窗
+// 根本用不到（SPLIT_VIEW_NAMES 裡沒有它們），純屬白算。
+//
+// 另外一個副作用是體感問題：每幀重新 fit 包圍盒，代表角色一動、包圍盒一變，
+// 預覽鏡頭的距離就跟著抖，看起來像鏡頭在微微呼吸。
+//
+// 改法有兩層：
+//  1) 取景（量包圍盒、算距離）降到每 SPLIT_VIEW_REFIT_INTERVAL_MS 一次，而且整批
+//     只量一次包圍盒、只更新一次世界矩陣，六個視角共用同一份量測結果。
+//  2) 相機不直接跳到新算出的位置，而是每幀用 SPLIT_VIEW_FOLLOW_T 阻尼靠近，
+//     所以節流造成的「每 250ms 跳一次」不會被看見，反而比原本更穩。
+const SPLIT_VIEW_REFIT_INTERVAL_MS = 250;
+const SPLIT_VIEW_FOLLOW_T = 0.15;
+let _splitRefitAt = -Infinity;
+
+// 讓下一幀無條件重新取景（開/關預覽視窗、視窗尺寸變動時呼叫）
+function invalidateSplitViewFraming(){ _splitRefitAt = -Infinity; }
+
+// animate() 每幀在主畫面渲染完之後呼叫：場景的 matrixWorld 這一幀已經由
+// renderer.render() 算好，所以量包圍盒時一律帶 skipMatrixUpdate=true。
+function updateSplitViewPanes(now){
   const names = Object.keys(splitViewPanes);
   if (names.length === 0 || !scene) return;
-  const presets = getCameraPresets();
+  const t = (typeof now === "number") ? now : performance.now();
+
+  if (t - _splitRefitAt >= SPLIT_VIEW_REFIT_INTERVAL_MS){
+    _splitRefitAt = t;
+    const info = getModelBoundsInfo(true); // 整批共用這一份量測結果
+    for (const name of names){
+      const pane = splitViewPanes[name];
+      // 每個預覽視窗用自己的 aspect 算取景距離（小 canvas 的長寬比跟主畫面不同）
+      const preset = computeBodyCameraPreset(name, info, pane.camera.aspect);
+      if (!preset) continue;
+      pane.desiredPos.set(preset.pos[0], preset.pos[1], preset.pos[2]);
+      pane.desiredTarget.set(preset.target[0], preset.target[1], preset.target[2]);
+      if (!pane.framed){ // 第一次取景：瞬間就位，不做阻尼
+        pane.curPos.copy(pane.desiredPos);
+        pane.curTarget.copy(pane.desiredTarget);
+        pane.framed = true;
+      }
+    }
+  }
+
   for (const name of names){
     const pane = splitViewPanes[name];
-    const preset = presets[name];
-    if (!preset) continue;
-    pane.camera.position.set(preset.pos[0], preset.pos[1], preset.pos[2]);
-    pane.camera.lookAt(preset.target[0], preset.target[1], preset.target[2]);
+    // 防禦性檢查：正常情況一定為 true（量不到包圍盒時 computeBodyCameraPreset 會給退回值），
+    // 只有視角名稱不在 CAMERA_BODY_VIEW_NAMES 裡才會是 false，那種情況就別渲染了
+    if (!pane.framed) continue;
+    pane.curPos.lerp(pane.desiredPos, SPLIT_VIEW_FOLLOW_T);
+    pane.curTarget.lerp(pane.desiredTarget, SPLIT_VIEW_FOLLOW_T);
+    pane.camera.position.copy(pane.curPos);
+    pane.camera.lookAt(pane.curTarget);
     pane.renderer.render(scene, pane.camera);
   }
 }
@@ -7407,15 +9082,161 @@ function onResize(){
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-  resizeAllSplitPanes();
+  resizeAllSplitPanes(); // 內部會呼叫 invalidateSplitViewFraming()
 }
+
+// ======================================================================
+// 效能面板（Performance Panel）— 顯示 FPS／單幀耗時／Draw Calls／三角形數，
+// 並標示目前是否處於下面「閒置降頻」狀態。面板只負責讀取既有的計時資訊拿來
+// 顯示，完全不影響任何運算或渲染邏輯，關閉面板時連 DOM 都不會去更新。
+// ======================================================================
+const PERF_PANEL_STORAGE_KEY = "tuttingPerfPanelEnabled";
+let perfPanelEnabled = true;
+
+const PERF_EMA_ALPHA = 0.12; // 指數移動平均的平滑係數，避免單幀抖動讓數字一直跳
+
+// rAF 回呼頻率：不管這一幀有沒有觸發實際渲染，每次 requestAnimationFrame 都算一次。
+let _perfRafLastTime = 0;
+let _perfRafEmaMs = 16.7;
+
+// 實際渲染幀率：只有真的呼叫 renderer.render() 才算一次。閒置降頻時這個數字
+// 會明顯掉到約 IDLE_RENDER_INTERVAL_MS 對應的 fps，跟上面 rAF 頻率的落差
+// 正好就是「閒置降頻機制省下來的量」，方便直接驗證該機制有沒有在運作。
+let _perfRenderLastTime = 0;
+let _perfRenderEmaMs = 16.7;
+
+let _perfLastDomUpdateAt = 0;
+const PERF_DOM_UPDATE_INTERVAL_MS = 250; // DOM 文字更新節流，數字本身每幀都在算，只是畫面沒必要每幀都重繪文字
+
+function initPerfPanel(){
+  const chk = document.getElementById("showPerfPanelChk");
+  const panel = document.getElementById("perfPanel");
+  if (!chk || !panel) return;
+  try {
+    const raw = localStorage.getItem(PERF_PANEL_STORAGE_KEY);
+    perfPanelEnabled = (raw === null) ? true : (raw === "1");
+  } catch (e) { perfPanelEnabled = true; }
+  chk.checked = perfPanelEnabled;
+  panel.style.display = perfPanelEnabled ? "flex" : "none";
+  chk.onchange = (e) => {
+    perfPanelEnabled = e.target.checked;
+    panel.style.display = perfPanelEnabled ? "flex" : "none";
+    try { localStorage.setItem(PERF_PANEL_STORAGE_KEY, perfPanelEnabled ? "1" : "0"); } catch (err) {}
+  };
+}
+
+// 每次 requestAnimationFrame 回呼「一開始」呼叫一次，量測瀏覽器實際排程給我們的頻率。
+function perfTickRaf(now){
+  if (_perfRafLastTime){
+    const dt = now - _perfRafLastTime;
+    if (dt > 0 && dt < 1000) _perfRafEmaMs += (dt - _perfRafEmaMs) * PERF_EMA_ALPHA;
+  }
+  _perfRafLastTime = now;
+}
+
+// 只有這一幀真的渲染了才呼叫，量測「畫面實際更新」的頻率。
+function perfTickRender(now){
+  if (_perfRenderLastTime){
+    const dt = now - _perfRenderLastTime;
+    if (dt > 0 && dt < 1000) _perfRenderEmaMs += (dt - _perfRenderEmaMs) * PERF_EMA_ALPHA;
+  }
+  _perfRenderLastTime = now;
+}
+
+// idle：是否正處於閒置降頻狀態（由 animate() 傳入，不在這裡重算）。
+// didRenderThisFrame：這一幀是否真的跑到 renderer.render()（idle 跳幀時為 false）。
+function updatePerfPanelDom(now, idle, didRenderThisFrame){
+  if (!perfPanelEnabled) return;
+  if (now - _perfLastDomUpdateAt < PERF_DOM_UPDATE_INTERVAL_MS) return;
+  _perfLastDomUpdateAt = now;
+
+  const rafFps = _perfRafEmaMs > 0 ? 1000 / _perfRafEmaMs : 0;
+  const renderFps = _perfRenderEmaMs > 0 ? 1000 / _perfRenderEmaMs : 0;
+  const info = (didRenderThisFrame && renderer) ? renderer.info.render : null;
+
+  const panelEl = document.getElementById("perfPanel");
+  const fpsEl = document.getElementById("perfFps");
+  const drawEl = document.getElementById("perfDraw");
+
+  const dot = idle ? "🟡" : "🟢";
+  if (fpsEl) fpsEl.textContent = `${dot} ${renderFps.toFixed(0)} fps ・ ${_perfRenderEmaMs.toFixed(1)} ms`;
+  if (info && drawEl) drawEl.textContent = `DC ${info.calls} ・ Tri ${info.triangles.toLocaleString()}`;
+  if (panelEl){
+    // 用既有的全站 Tooltip 系統，滑鼠移上去才看得到主循環(rAF)頻率跟閒置狀態說明，平常維持精簡
+    panelEl.setAttribute("data-tooltip",
+      (idle ? "🟡 閒置降頻中（約10fps）" : "🟢 全速運算中") +
+      ` — 主循環(rAF) ${rafFps.toFixed(0)}fps`);
+  }
+}
+
+// ======================================================================
+// 閒置偵測（Idle Detection）— animate() 原本不管畫面是否真的在變化，
+// 每秒都無條件把整條 FK/IK/碰撞/渲染 pipeline 跑滿 60 次，對一個「擺姿勢」
+// 工具來說，使用者盯著調整的時間通常遠少於畫面靜止的時間，長時間下來對
+// CPU、GPU（尤其 antialias render）、筆電風扇、行動裝置電量都是白白的負擔。
+//
+// 做法：每幀判斷「這一幀有沒有明確理由畫面會不一樣」（isSceneActive）；
+// 連續好幾幀都沒有理由變化，就視為進入閒置狀態，把重運算與 render 降頻，
+// 而不是整個停格——使用者一旦有輸入（拖曳、播放、轉鏡頭…）馬上就會偵測到
+// 並恢復全速，不會有肉眼可查覺的延遲。
+// ======================================================================
+
+// current 逼近 target、OrbitControls 阻尼、分割視窗阻尼跟隨都是「指數衰減」，
+// 數學上永遠不會精確等於目標值，只能用「差距是否已經小到可視為靜止」來判斷，
+// 不能判斷「是否相等」。這裡沿用跟 updateBones() 一樣的閾值精神，只是換成用於相機。
+const IDLE_CAMERA_CONVERGE_EPS_SQ = 1e-8; // 位置/目標點差距平方和小於這個值才算已收斂
+const _idleLastCamPos = new THREE.Vector3();
+const _idleLastCamTarget = new THREE.Vector3();
+let _idleCamInited = false;
+
+// 回傳這一幀相機（位置＋看點）是否還在移動中（含 OrbitControls 阻尼滑動、拖曳、滾輪縮放）。
+// 呼叫端保證每幀都會呼叫一次（不能因為進入閒置模式就跳過呼叫，否則快照會停在舊值，
+// 之後使用者移動相機時第一幀的 delta 會被誤判成一大段瞬移）。
+function isCameraStillMoving(){
+  if (!_idleCamInited){
+    _idleLastCamPos.copy(camera.position);
+    _idleLastCamTarget.copy(controls.target);
+    _idleCamInited = true;
+    return true; // 第一次呼叫（例如剛載入模型），保守視為「還在動」
+  }
+  const posDeltaSq = camera.position.distanceToSquared(_idleLastCamPos);
+  const targetDeltaSq = controls.target.distanceToSquared(_idleLastCamTarget);
+  _idleLastCamPos.copy(camera.position);
+  _idleLastCamTarget.copy(controls.target);
+  return posDeltaSq > IDLE_CAMERA_CONVERGE_EPS_SQ || targetDeltaSq > IDLE_CAMERA_CONVERGE_EPS_SQ;
+}
+
+// posesStillMoving：由呼叫端傳入 updateBones() 這一幀的回傳值（避免這裡重算一次）。
+// 只要下列任何一項成立，這一幀就必須視為「場景活躍中」，不能被閒置降頻邏輯跳過：
+function isSceneActive(posesStillMoving, cameraStillMoving){
+  return kfPlaying                                   // 正在播放關鍵影格
+      || groovePreviewEnabled                          // 律動即時預覽開著，姿勢會持續變化
+      || draggingKey !== null                           // 使用者正在拖曳某顆關節/IK球
+      || (transformControls && transformControls.dragging)
+      || (transformControlsIK && transformControlsIK.dragging)
+      || (grabBoxCore && grabBoxCore.isDragging())      // 扶握箱專屬控制環正在被拖曳
+      || cameraTween !== null                           // 「鏡頭」預設視角補間動畫進行中
+      || posesStillMoving                                // current 尚未追上 target（含彈簧式lerp的收尾）
+      || cameraStillMoving;                              // 相機位置/看點尚未收斂（含OrbitControls阻尼收尾）
+}
+
+const IDLE_THRESHOLD_FRAMES = 30;    // 連續約0.5秒（60fps下）沒有變化才視為進入閒置狀態，避免收斂尾段的抖動被誤判成「又活躍了」
+const IDLE_RENDER_INTERVAL_MS = 100; // 閒置狀態下，重運算＋渲染降到約每100ms一次（~10fps）；一有輸入立刻恢復全速
+let _idleFrameCount = 0;
+let _idleLastRenderAt = 0;
 
 function animate(now){
   requestAnimationFrame(animate);
+  perfTickRaf(now); // 每次 rAF 回呼都要量測，不能因為閒置就跳過（道理跟下面相機收斂判斷一樣）
+
+  // 相機收斂判斷必須「每幀都呼叫」以維持快照正確（見函式內註解），跟是否要降頻無關，成本也很低。
+  const cameraStillMoving = isCameraStillMoving();
+
+  let posesStillMoving = kfPlaying; // 播放中永遠視為「還在動」，updateBones() 這幀不會被呼叫到
   if (kfPlaying){
     updateKeyframePlayback(now);
   } else {
-    updateBones();
+    posesStillMoving = updateBones();
     solveSpineRootFollow();
     if (grabBoxCore) grabBoxCore.updateEachFrame();
     solveIKAll();
@@ -7428,6 +9249,23 @@ function animate(now){
       applySquatGroove(now, groovePreviewStartTime, true);
     }
   }
+
+  const active = isSceneActive(posesStillMoving, cameraStillMoving);
+  _idleFrameCount = active ? 0 : _idleFrameCount + 1;
+  const idle = _idleFrameCount > IDLE_THRESHOLD_FRAMES;
+
+  // 閒置中還沒到下一個降頻時間點：這一幀直接跳過碰撞/渲染，省下這幀剩下的所有工作。
+  // 上面 FK/IK 已經算過一次（求解本身很快，且下一幀馬上要用最新的 target/current 判斷是否已收斂，
+  // 拆出來反而複雜化狀態機），真正貴的是碰撞求解＋DOM更新＋render，所以降頻只作用在這之後。
+  if (idle && now - _idleLastRenderAt < IDLE_RENDER_INTERVAL_MS){
+    updatePerfPanelDom(now, idle, false); // 這幀沒渲染，仍更新面板讓 rAF fps／閒置狀態即時反映
+    return;
+  }
+  if (idle) _idleLastRenderAt = now;
+
+  solveHandBodyCollision(); // 放在 FK/IK/律動/關鍵影格播放都跑完之後，修正「最終姿勢」，不管姿勢來源是哪裡
+  solveHandHandCollision(); // 手-身體修正完之後再處理雙手互碰，避免兩套修正互相覆蓋彼此的結果
+  updateHandCollisionVizMeshes();
   updateMarkers();
   updateSkeletonLines();
   updateOverviewPanel();
@@ -7435,7 +9273,9 @@ function animate(now){
   updateCameraTween(now);
   controls.update();
   renderer.render(scene, camera);
-  updateSplitViewPanes();
+  perfTickRender(now);
+  updateSplitViewPanes(now);
+  updatePerfPanelDom(now, idle, true);
 }
 </script>
 </body>
